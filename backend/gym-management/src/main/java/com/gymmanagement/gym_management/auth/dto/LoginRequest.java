@@ -1,13 +1,2 @@
 package com.gymmanagement.gym_management.auth.dto;
-
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
-
-@Data
-public class LoginRequest {
-    @NotBlank @Email
-    private String email;
-    @NotBlank
-    private String password;
-}
+// Replaced by dto.auth.LoginRequest — kept as empty class to avoid deletion issues

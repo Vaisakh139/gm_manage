@@ -1,69 +1,91 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import Layout from './components/Layout';
+import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './components/common/Toast';
+import ProtectedRoute from './components/common/ProtectedRoute';
+import Layout from './components/common/Layout';
 
-import Login from './pages/Login';
-import Dashboard from './pages/admin/Dashboard';
-import Members from './pages/admin/Members';
-import Trainers from './pages/admin/Trainers';
-import Plans from './pages/admin/Plans';
-import Payments from './pages/admin/Payments';
-import AssignedMembers from './pages/trainer/AssignedMembers';
-import WorkoutPlans from './pages/trainer/WorkoutPlans';
-import Profile from './pages/member/Profile';
-import Membership from './pages/member/Membership';
-import WorkoutPlan from './pages/member/WorkoutPlan';
-import PaymentHistory from './pages/member/PaymentHistory';
+// Public
+import Home from './pages/public/Home';
 
-function App() {
+// Auth
+import Login from './pages/auth/Login';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+import ChangePassword from './pages/auth/ChangePassword';
+
+// Admin
+import AdminDashboard from './pages/admin/Dashboard';
+import GymManagement from './pages/admin/GymManagement';
+import UserManagement from './pages/admin/UserManagement';
+
+// Gym Owner
+import GymOwnerDashboard from './pages/gymowner/Dashboard';
+import GymProfile from './pages/gymowner/GymProfile';
+import MembersList from './pages/gymowner/MembersList';
+import AddEditMember from './pages/gymowner/AddEditMember';
+
+// Member
+import MemberDashboard from './pages/member/Dashboard';
+import MemberProfile from './pages/member/Profile';
+import MemberChangePassword from './pages/member/MemberChangePassword';
+
+export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* ── Public ──────────────────────────────────── */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/change-password" element={
+              <ProtectedRoute><ChangePassword /></ProtectedRoute>
+            } />
 
-          {/* Admin routes */}
-          <Route path="/admin" element={
-            <ProtectedRoute roles={['ADMIN']}>
-              <Layout title="Admin Panel" />
-            </ProtectedRoute>
-          }>
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="members" element={<Members />} />
-            <Route path="trainers" element={<Trainers />} />
-            <Route path="plans" element={<Plans />} />
-            <Route path="payments" element={<Payments />} />
-          </Route>
+            {/* ── Admin ───────────────────────────────────── */}
+            <Route path="/admin" element={
+              <ProtectedRoute roles={['ADMIN']}>
+                <Layout title="Admin Panel" />
+              </ProtectedRoute>
+            }>
+              <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="gyms" element={<GymManagement />} />
+              <Route path="users" element={<UserManagement />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
 
-          {/* Trainer routes */}
-          <Route path="/trainer" element={
-            <ProtectedRoute roles={['TRAINER']}>
-              <Layout title="Trainer Panel" />
-            </ProtectedRoute>
-          }>
-            <Route path="members" element={<AssignedMembers />} />
-            <Route path="workouts" element={<WorkoutPlans />} />
-          </Route>
+            {/* ── Gym Owner ───────────────────────────────── */}
+            <Route path="/gym-owner" element={
+              <ProtectedRoute roles={['GYM_OWNER']}>
+                <Layout title="Gym Owner Panel" />
+              </ProtectedRoute>
+            }>
+              <Route path="dashboard" element={<GymOwnerDashboard />} />
+              <Route path="profile" element={<GymProfile />} />
+              <Route path="members" element={<MembersList />} />
+              <Route path="members/add" element={<AddEditMember />} />
+              <Route path="members/:id/edit" element={<AddEditMember />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
 
-          {/* Member routes */}
-          <Route path="/member" element={
-            <ProtectedRoute roles={['MEMBER']}>
-              <Layout title="Member Portal" />
-            </ProtectedRoute>
-          }>
-            <Route path="profile" element={<Profile />} />
-            <Route path="membership" element={<Membership />} />
-            <Route path="workout" element={<WorkoutPlan />} />
-            <Route path="payments" element={<PaymentHistory />} />
-          </Route>
+            {/* ── Member ──────────────────────────────────── */}
+            <Route path="/member" element={
+              <ProtectedRoute roles={['MEMBER']}>
+                <Layout title="Member Portal" />
+              </ProtectedRoute>
+            }>
+              <Route path="dashboard" element={<MemberDashboard />} />
+              <Route path="profile" element={<MemberProfile />} />
+              <Route path="change-password" element={<MemberChangePassword />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+            </Route>
 
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }
-
-export default App;

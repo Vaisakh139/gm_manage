@@ -1,59 +1,40 @@
 import { useEffect, useState } from 'react';
-import { getDashboardStats } from '../../api';
+import { adminApi } from '../../api/axios';
 import type { DashboardStats } from '../../types';
 
-export default function Dashboard() {
+function StatCard({ label, value, icon, sub }: { label: string; value: number; icon: string; sub?: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-start gap-4">
+      <div className="text-3xl">{icon}</div>
+      <div>
+        <p className="text-sm text-gray-500">{label}</p>
+        <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
+        {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
 
-  useEffect(() => {
-    getDashboardStats().then(r => setStats(r.data));
-  }, []);
+  useEffect(() => { adminApi.getStats().then((r) => setStats(r.data.data)); }, []);
 
-  if (!stats) return <div>Loading...</div>;
+  if (!stats) return <div className="text-gray-400 text-center py-16">Loading…</div>;
 
   return (
-    <>
-      <div className="stats-grid">
-        <div className="stat-card blue">
-          <div className="stat-value">{stats.totalMembers}</div>
-          <div className="stat-label">Total Members</div>
-        </div>
-        <div className="stat-card green">
-          <div className="stat-value">{stats.activeMembers}</div>
-          <div className="stat-label">Active Members</div>
-        </div>
-        <div className="stat-card purple">
-          <div className="stat-value">{stats.totalTrainers}</div>
-          <div className="stat-label">Trainers</div>
-        </div>
-        <div className="stat-card orange">
-          <div className="stat-value">{stats.pendingPayments}</div>
-          <div className="stat-label">Pending Payments</div>
-        </div>
-        <div className="stat-card green">
-          <div className="stat-value">${Number(stats.totalRevenue).toFixed(2)}</div>
-          <div className="stat-label">Total Revenue</div>
-        </div>
-        <div className="stat-card blue">
-          <div className="stat-value">{stats.activeWorkoutPlans}</div>
-          <div className="stat-label">Active Workout Plans</div>
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Overview</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <StatCard label="Total Gyms" value={stats.totalGyms} icon="🏢" />
+          <StatCard label="Gym Owners" value={stats.totalGymOwners} icon="👔"
+            sub={`${stats.activeGymOwners} active`} />
+          <StatCard label="Total Members" value={stats.totalMembers} icon="👥"
+            sub={`${stats.activeMembers} active`} />
+          <StatCard label="Active Members" value={stats.activeMembers} icon="✅" />
         </div>
       </div>
-      <div className="card">
-        <h3 style={{ marginBottom: 16 }}>Quick Overview</h3>
-        <table>
-          <tbody>
-            <tr><td>Total Members</td><td><strong>{stats.totalMembers}</strong></td></tr>
-            <tr><td>Active Members</td><td><strong>{stats.activeMembers}</strong></td></tr>
-            <tr><td>Total Trainers</td><td><strong>{stats.totalTrainers}</strong></td></tr>
-            <tr><td>Active Trainers</td><td><strong>{stats.activeTrainers}</strong></td></tr>
-            <tr><td>Total Payments</td><td><strong>{stats.totalPayments}</strong></td></tr>
-            <tr><td>Pending Payments</td><td><strong>{stats.pendingPayments}</strong></td></tr>
-            <tr><td>Total Revenue</td><td><strong>${Number(stats.totalRevenue).toFixed(2)}</strong></td></tr>
-            <tr><td>Active Workout Plans</td><td><strong>{stats.activeWorkoutPlans}</strong></td></tr>
-          </tbody>
-        </table>
-      </div>
-    </>
+    </div>
   );
 }
