@@ -5,6 +5,7 @@ import com.gymmanagement.gym_management.dto.gymowner.*;
 import com.gymmanagement.gym_management.entity.*;
 import com.gymmanagement.gym_management.exception.BusinessException;
 import com.gymmanagement.gym_management.exception.ResourceNotFoundException;
+import com.gymmanagement.gym_management.mapper.MemberMapper;
 import com.gymmanagement.gym_management.repository.GymRepository;
 import com.gymmanagement.gym_management.repository.MemberRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
@@ -28,7 +29,10 @@ public class GymOwnerService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
 
-    // ── Gym ─────────────────────────────────────────────────
+    // ── Injected MapStruct mapper ─────────────────────────────
+    private final MemberMapper memberMapper;
+
+    // ── Gym ──────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public Gym getGymByOwner(Long ownerId) {
@@ -45,7 +49,7 @@ public class GymOwnerService {
         return gymRepository.save(gym);
     }
 
-    // ── Dashboard ────────────────────────────────────────────
+    // ── Dashboard ─────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public GymOwnerDashboardResponse getDashboard(Long ownerId) {
@@ -59,14 +63,16 @@ public class GymOwnerService {
                 .build();
     }
 
-    // ── Members ──────────────────────────────────────────────
+    // ── Members ───────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public PageResponse<MemberResponse> getMembers(Long ownerId, String search, int page, int size) {
         Gym gym = getGymByOwner(ownerId);
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        var memberPage = memberRepository.findByGymIdAndSearch(gym.getId(), search, pageable);
-        return PageResponse.from(memberPage.map(this::toMemberResponse));
+        return PageResponse.from(
+                memberRepository.findByGymIdAndSearch(gym.getId(), search, pageable)
+                                .map(memberMapper::toMemberResponse)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -76,10 +82,10 @@ public class GymOwnerService {
         if (!member.getGym().getId().equals(gym.getId())) {
             throw new BusinessException("Member does not belong to your gym");
         }
-        return toMemberResponse(member);
+        return memberMapper.toMemberResponse(member);
     }
 
-    /** Add a new member — creates a User account + sends welcome email */
+    /** Create a User account for the new member, persist the Member, and send a welcome email */
     @Transactional
     public MemberResponse addMember(Long ownerId, MemberRequest request) {
         Gym gym = getGymByOwner(ownerId);
@@ -88,6 +94,7 @@ public class GymOwnerService {
         }
 
         String tempPassword = generateTempPassword();
+
         User user = User.builder()
                 .name(request.getFullName())
                 .email(request.getEmail())
@@ -110,7 +117,8 @@ public class GymOwnerService {
         member = memberRepository.save(member);
 
         emailService.sendWelcomeEmail(user.getEmail(), user.getName(), tempPassword);
-        return toMemberResponse(member);
+
+        return memberMapper.toMemberResponse(member);
     }
 
     @Transactional
@@ -126,9 +134,11 @@ public class GymOwnerService {
         member.setMembershipPlan(request.getMembershipPlan());
         member.setStartDate(request.getStartDate());
         member.setEndDate(request.getEndDate());
-        if (request.getStatus() != null) member.setStatus(request.getStatus());
+        if (request.getStatus() != null) {
+            member.setStatus(request.getStatus());
+        }
 
-        return toMemberResponse(memberRepository.save(member));
+        return memberMapper.toMemberResponse(memberRepository.save(member));
     }
 
     @Transactional
@@ -141,23 +151,7 @@ public class GymOwnerService {
         memberRepository.delete(member);
     }
 
-    // ── Mappers ──────────────────────────────────────────────
-
-    private MemberResponse toMemberResponse(Member m) {
-        return MemberResponse.builder()
-                .id(m.getId())
-                .userId(m.getUser().getId())
-                .fullName(m.getUser().getName())
-                .email(m.getUser().getEmail())
-                .phone(m.getUser().getPhone())
-                .membershipPlan(m.getMembershipPlan())
-                .startDate(m.getStartDate())
-                .endDate(m.getEndDate())
-                .status(m.getStatus())
-                .active(m.getUser().isActive())
-                .createdAt(m.getCreatedAt())
-                .build();
-    }
+    // ── Helpers ───────────────────────────────────────────────
 
     private Member findMember(Long id) {
         return memberRepository.findById(id)

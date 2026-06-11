@@ -15,8 +15,13 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * All routes in this controller require ROLE_GYM_OWNER.
+ * Using hasAuthority('ROLE_GYM_OWNER') instead of hasRole('GYM_OWNER')
+ * to be explicit and avoid any Spring Security prefix-handling ambiguity.
+ */
 @RestController
-@RequestMapping
+@PreAuthorize("hasAuthority('ROLE_GYM_OWNER')")
 @RequiredArgsConstructor
 public class GymOwnerController {
 
@@ -25,30 +30,26 @@ public class GymOwnerController {
     // ── Gym owner's own gym ──────────────────────────────────
 
     @GetMapping("/api/gym-owner/gym")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<Gym>> getMyGym(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(ApiResponse.ok("Gym fetched", gymOwnerService.getGymByOwner(user.getId())));
     }
 
     @PutMapping("/api/gym-owner/gym")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<Gym>> updateMyGym(@AuthenticationPrincipal User user,
-                                                          @RequestBody Map<String, String> body) {
-        Gym gym = gymOwnerService.updateGym(user.getId(),
-                body.get("gymName"), body.get("address"), body.get("phone"));
+                                                         @RequestBody Map<String, String> body) {
+        Gym gym = gymOwnerService.updateGym(
+                user.getId(), body.get("gymName"), body.get("address"), body.get("phone"));
         return ResponseEntity.ok(ApiResponse.ok("Gym updated", gym));
     }
 
     @GetMapping("/api/gym-owner/dashboard")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<GymOwnerDashboardResponse>> getDashboard(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(ApiResponse.ok("Dashboard data", gymOwnerService.getDashboard(user.getId())));
     }
 
-    // ── Members (spec: /api/members) ────────────────────────
+    // ── Members ──────────────────────────────────────────────
 
     @GetMapping("/api/members")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<PageResponse<MemberResponse>>> getMembers(
             @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "") String search,
@@ -59,29 +60,28 @@ public class GymOwnerController {
     }
 
     @GetMapping("/api/members/{id}")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<MemberResponse>> getMember(@AuthenticationPrincipal User user,
-                                                                   @PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok("Member fetched", gymOwnerService.getMember(user.getId(), id)));
+                                                                  @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok("Member fetched",
+                gymOwnerService.getMember(user.getId(), id)));
     }
 
     @PostMapping("/api/members")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<MemberResponse>> addMember(@AuthenticationPrincipal User user,
                                                                    @Valid @RequestBody MemberRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Member added", gymOwnerService.addMember(user.getId(), request)));
+        return ResponseEntity.ok(ApiResponse.ok("Member added",
+                gymOwnerService.addMember(user.getId(), request)));
     }
 
     @PutMapping("/api/members/{id}")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<MemberResponse>> updateMember(@AuthenticationPrincipal User user,
                                                                       @PathVariable Long id,
                                                                       @Valid @RequestBody MemberRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Member updated", gymOwnerService.updateMember(user.getId(), id, request)));
+        return ResponseEntity.ok(ApiResponse.ok("Member updated",
+                gymOwnerService.updateMember(user.getId(), id, request)));
     }
 
     @DeleteMapping("/api/members/{id}")
-    @PreAuthorize("hasRole('GYM_OWNER')")
     public ResponseEntity<ApiResponse<Void>> deleteMember(@AuthenticationPrincipal User user,
                                                            @PathVariable Long id) {
         gymOwnerService.deleteMember(user.getId(), id);

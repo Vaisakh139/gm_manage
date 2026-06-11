@@ -5,6 +5,7 @@ import com.gymmanagement.gym_management.dto.member.UpdateProfileRequest;
 import com.gymmanagement.gym_management.entity.Member;
 import com.gymmanagement.gym_management.entity.User;
 import com.gymmanagement.gym_management.exception.ResourceNotFoundException;
+import com.gymmanagement.gym_management.mapper.MemberMapper;
 import com.gymmanagement.gym_management.repository.MemberRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,11 +19,14 @@ public class MemberProfileService {
     private final MemberRepository memberRepository;
     private final UserRepository userRepository;
 
+    // ── Injected MapStruct mapper ─────────────────────────────
+    private final MemberMapper memberMapper;
+
     @Transactional(readOnly = true)
     public ProfileResponse getProfile(Long userId) {
         Member member = memberRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member profile not found"));
-        return toProfileResponse(member);
+        return memberMapper.toProfileResponse(member);
     }
 
     @Transactional
@@ -35,20 +39,6 @@ public class MemberProfileService {
 
         Member member = memberRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member profile not found"));
-        return toProfileResponse(member);
-    }
-
-    private ProfileResponse toProfileResponse(Member m) {
-        return ProfileResponse.builder()
-                .userId(m.getUser().getId())
-                .name(m.getUser().getName())
-                .email(m.getUser().getEmail())
-                .phone(m.getUser().getPhone())
-                .gymName(m.getGym().getGymName())
-                .membershipPlan(m.getMembershipPlan())
-                .startDate(m.getStartDate())
-                .endDate(m.getEndDate())
-                .memberStatus(m.getStatus())
-                .build();
+        return memberMapper.toProfileResponse(member);
     }
 }

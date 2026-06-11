@@ -12,9 +12,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * All routes require ROLE_MEMBER.
+ * Using hasAuthority('ROLE_MEMBER') for explicit, prefix-safe matching.
+ */
 @RestController
 @RequestMapping("/api/profile")
-@PreAuthorize("hasRole('MEMBER')")
+@PreAuthorize("hasAuthority('ROLE_MEMBER')")
 @RequiredArgsConstructor
 public class MemberController {
 
@@ -22,12 +26,14 @@ public class MemberController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<ProfileResponse>> getProfile(@AuthenticationPrincipal User user) {
-        return ResponseEntity.ok(ApiResponse.ok("Profile fetched", memberProfileService.getProfile(user.getId())));
+        return ResponseEntity.ok(ApiResponse.ok("Profile fetched",
+                memberProfileService.getProfile(user.getId())));
     }
 
     @PutMapping
     public ResponseEntity<ApiResponse<ProfileResponse>> updateProfile(@AuthenticationPrincipal User user,
                                                                        @Valid @RequestBody UpdateProfileRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Profile updated", memberProfileService.updateProfile(user.getId(), request)));
+        return ResponseEntity.ok(ApiResponse.ok("Profile updated",
+                memberProfileService.updateProfile(user.getId(), request)));
     }
 }
