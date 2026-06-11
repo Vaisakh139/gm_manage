@@ -4,6 +4,8 @@ import com.gymmanagement.gym_management.dto.admin.*;
 import com.gymmanagement.gym_management.entity.*;
 import com.gymmanagement.gym_management.exception.BusinessException;
 import com.gymmanagement.gym_management.exception.ResourceNotFoundException;
+import com.gymmanagement.gym_management.mapper.GymMapper;
+import com.gymmanagement.gym_management.mapper.UserMapper;
 import com.gymmanagement.gym_management.repository.GymRepository;
 import com.gymmanagement.gym_management.repository.MemberRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
@@ -25,14 +27,21 @@ public class AdminService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
 
-    // ── Gyms ────────────────────────────────────────────────
+    // ── Injected MapStruct mappers ────────────────────────────
+    private final GymMapper gymMapper;
+    private final UserMapper userMapper;
+
+    // ── Gyms ─────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<GymResponse> getAllGyms() {
-        return gymRepository.findAll().stream().map(this::toGymResponse).toList();
+        return gymRepository.findAll()
+                .stream()
+                .map(gymMapper::toGymResponse)
+                .toList();
     }
 
-    /** Create gym + GYM_OWNER account with temp password, then send welcome email */
+    /** Create gym + GYM_OWNER account with a temporary password, then send a welcome email */
     @Transactional
     public GymResponse createGym(GymRequest request) {
         if (userRepository.existsByEmail(request.getOwnerEmail())) {
@@ -40,6 +49,7 @@ public class AdminService {
         }
 
         String tempPassword = generateTempPassword();
+
         User owner = User.builder()
                 .name(request.getOwnerName())
                 .email(request.getOwnerEmail())
@@ -60,7 +70,8 @@ public class AdminService {
         gym = gymRepository.save(gym);
 
         emailService.sendWelcomeEmail(owner.getEmail(), owner.getName(), tempPassword);
-        return toGymResponse(gym);
+
+        return gymMapper.toGymResponse(gym);
     }
 
     @Transactional
@@ -69,22 +80,22 @@ public class AdminService {
         gym.setGymName(request.getGymName());
         gym.setAddress(request.getAddress());
         gym.setPhone(request.getPhone());
-        return toGymResponse(gymRepository.save(gym));
+        return gymMapper.toGymResponse(gymRepository.save(gym));
     }
 
     @Transactional
     public void deleteGym(Long gymId) {
-        Gym gym = findGym(gymId);
-        gymRepository.delete(gym);
+        gymRepository.delete(findGym(gymId));
     }
 
-    // ── Users ────────────────────────────────────────────────
+    // ── Users ─────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
-        return userRepository.findAll().stream()
+        return userRepository.findAll()
+                .stream()
                 .filter(u -> u.getRole() != Role.ADMIN)
-                .map(this::toUserResponse)
+                .map(userMapper::toUserResponse)
                 .toList();
     }
 
@@ -93,10 +104,10 @@ public class AdminService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setActive(active);
-        return toUserResponse(userRepository.save(user));
+        return userMapper.toUserResponse(userRepository.save(user));
     }
 
-    // ── Dashboard ────────────────────────────────────────────
+    // ── Dashboard ─────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public DashboardStatsResponse getDashboardStats() {
@@ -109,34 +120,7 @@ public class AdminService {
                 .build();
     }
 
-    // ── Mappers ──────────────────────────────────────────────
-
-    private GymResponse toGymResponse(Gym g) {
-        return GymResponse.builder()
-                .id(g.getId())
-                .gymName(g.getGymName())
-                .address(g.getAddress())
-                .phone(g.getPhone())
-                .ownerId(g.getOwner().getId())
-                .ownerName(g.getOwner().getName())
-                .ownerEmail(g.getOwner().getEmail())
-                .ownerActive(g.getOwner().isActive())
-                .createdAt(g.getCreatedAt())
-                .build();
-    }
-
-    private UserResponse toUserResponse(User u) {
-        return UserResponse.builder()
-                .id(u.getId())
-                .name(u.getName())
-                .email(u.getEmail())
-                .phone(u.getPhone())
-                .role(u.getRole().name())
-                .active(u.isActive())
-                .passwordChanged(u.isPasswordChanged())
-                .createdAt(u.getCreatedAt())
-                .build();
-    }
+    // ── Helpers ───────────────────────────────────────────────
 
     private Gym findGym(Long id) {
         return gymRepository.findById(id)

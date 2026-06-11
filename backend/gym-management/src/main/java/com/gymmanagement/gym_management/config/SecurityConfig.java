@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -20,6 +22,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.io.IOException;
 import java.util.List;
 
 @Configuration
@@ -49,13 +52,39 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+            // ── URL-level access rules ──────────────────────────────────────────
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/public/**").permitAll()
                 .anyRequest().authenticated()
             )
+
+            // ── Return JSON (not HTML) for 401 Unauthorized ─────────────────────
+            // Triggered when no token is present or token is invalid at the filter level.
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((request, response, authException) ->
+                    writeJson(response, HttpStatus.UNAUTHORIZED,
+                        "{\"success\":false,\"message\":\"Authentication required — please log in\"}")
+                )
+                // ── Return JSON for 403 Forbidden at the filter-chain level ──────
+                .accessDeniedHandler((request, response, accessDeniedException) ->
+                    writeJson(response, HttpStatus.FORBIDDEN,
+                        "{\"success\":false,\"message\":\"You do not have permission to perform this action\"}")
+                )
+            )
+
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
+    }
+
+    /** Write a plain JSON error body directly to the response. */
+    private void writeJson(jakarta.servlet.http.HttpServletResponse response,
+                           HttpStatus status, String json) throws IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write(json);
     }
 
     @Bean

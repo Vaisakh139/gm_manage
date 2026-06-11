@@ -12,9 +12,13 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * All routes require ROLE_ADMIN.
+ * Using hasAuthority('ROLE_ADMIN') for explicit, prefix-safe matching.
+ */
 @RestController
 @RequestMapping("/api/admin")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAuthority('ROLE_ADMIN')")
 @RequiredArgsConstructor
 public class AdminController {
 
@@ -63,6 +67,7 @@ public class AdminController {
             @PathVariable Long id,
             @RequestBody Map<String, Boolean> body) {
         boolean active = body.getOrDefault("active", true);
-        return ResponseEntity.ok(ApiResponse.ok("User status updated", adminService.updateUserStatus(id, active)));
+        return ResponseEntity.ok(ApiResponse.ok("User status updated",
+                adminService.updateUserStatus(id, active)));
     }
 }
