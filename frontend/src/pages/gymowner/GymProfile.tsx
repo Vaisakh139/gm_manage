@@ -7,32 +7,53 @@ interface GymData { id: number; gymName: string; address: string; phone: string 
 export default function GymProfile() {
   const { showToast } = useToast();
   const [gym, setGym] = useState<GymData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({ gymName: '', address: '', phone: '' });
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    gymOwnerApi.getMyGym().then((r) => {
-      setGym(r.data.data);
-      setForm({ gymName: r.data.data.gymName, address: r.data.data.address ?? '', phone: r.data.data.phone ?? '' });
-    });
-  }, []);
+  const loadGym = () => {
+    gymOwnerApi.getMyGym()
+      .then((r) => {
+        const g = r.data.data as GymData;
+        setGym(g);
+        setForm({ gymName: g.gymName, address: g.address ?? '', phone: g.phone ?? '' });
+        setError('');
+      })
+      .catch(() => setError('Failed to load gym profile'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { loadGym(); }, []);
 
   const save = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
       await gymOwnerApi.updateMyGym(form);
       showToast('Gym profile updated', 'success');
       setEditing(false);
-      gymOwnerApi.getMyGym().then((r) => setGym(r.data.data));
-    } catch { showToast('Update failed', 'error'); }
-    finally { setLoading(false); }
+      loadGym();
+    } catch {
+      showToast('Update failed', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
-
-  if (!gym) return <div className="text-gray-400 text-center py-16">Loading…</div>;
 
   const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
+
+  if (loading) return (
+    <div className="max-w-xl">
+      <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-8 bg-gray-100 rounded" />)}
+      </div>
+    </div>
+  );
+
+  if (error) return <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-700 text-sm">{error}</div>;
+  if (!gym) return null;
 
   return (
     <div className="max-w-xl">
@@ -51,16 +72,19 @@ export default function GymProfile() {
           <div className="space-y-4">
             {(['gymName', 'address', 'phone'] as const).map((k) => (
               <div key={k}>
-                <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">{k === 'gymName' ? 'Gym Name' : k}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
+                  {k === 'gymName' ? 'Gym Name' : k}
+                </label>
                 <input value={form[k]} onChange={f(k)}
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
               </div>
             ))}
             <div className="flex gap-3 pt-2">
-              <button onClick={() => setEditing(false)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={save} disabled={loading}
+              <button onClick={() => setEditing(false)}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button onClick={save} disabled={saving}
                 className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
-                {loading ? 'Saving…' : 'Save Changes'}
+                {saving ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
           </div>
