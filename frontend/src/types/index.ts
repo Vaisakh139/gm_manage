@@ -96,9 +96,18 @@ export interface DashboardStats {
 }
 
 export interface GymOwnerDashboard {
-  gymName: string;
+  totalGyms: number;
   totalMembers: number;
   activeMembers: number;
   inactiveMembers: number;
   expiredMembers: number;
+  gymStats: GymStat[];
+}
+
+export interface GymStat {
+  gymId: number;
+  gymName: string;
+  address: string | null;
+  totalMembers: number;
+  activeMembers: number;
 }

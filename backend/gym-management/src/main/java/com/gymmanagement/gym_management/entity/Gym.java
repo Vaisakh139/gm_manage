@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 
 /**
  * Represents a gym registered in the system.
- * Each gym is owned by exactly one GYM_OWNER user.
+ * One GYM_OWNER user can own multiple Gym records (different branches/locations).
  */
 @Entity
 @Table(name = "gyms")
@@ -27,9 +27,12 @@ public class Gym {
     private String address;
     private String phone;
 
-    /** The GYM_OWNER user who owns this gym */
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false, unique = true)
+    /**
+     * The GYM_OWNER user who owns this gym.
+     * ManyToOne — one owner can have multiple gym branches.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
     @Column(nullable = false, updatable = false)

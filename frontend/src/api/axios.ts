@@ -73,15 +73,22 @@ export const adminApi = {
 // Gym Owner  — requires ROLE_GYM_OWNER
 // ─────────────────────────────────────────────────────────────────────────────
 export const gymOwnerApi = {
-  getDashboard: ()                          => api.get('/gym-owner/dashboard'),
-  getMyGym:     ()                          => api.get('/gym-owner/gym'),
-  updateMyGym:  (data: object)              => api.put('/gym-owner/gym', data),
-  getMembers:   (search = '', page = 0, size = 10) =>
-    api.get(`/members?search=${encodeURIComponent(search)}&page=${page}&size=${size}`),
-  getMember:    (id: number)                => api.get(`/members/${id}`),
-  addMember:    (data: object)              => api.post('/members', data),
-  updateMember: (id: number, data: object)  => api.put(`/members/${id}`, data),
-  deleteMember: (id: number)                => api.delete(`/members/${id}`),
+  // Dashboard — aggregate across all owned gyms
+  getDashboard:  ()                                  => api.get('/gym-owner/dashboard'),
+
+  // Gym branch management
+  getMyGyms:     ()                                  => api.get('/gym-owner/gyms'),
+  createGym:     (data: object)                      => api.post('/gym-owner/gyms', data),
+  getMyGym:      (gymId: number)                     => api.get(`/gym-owner/gyms/${gymId}`),
+  updateMyGym:   (gymId: number, data: object)       => api.put(`/gym-owner/gyms/${gymId}`, data),
+
+  // Members — always scoped to a specific gym
+  getMembers: (gymId: number, search = '', page = 0, size = 10) =>
+    api.get(`/members?gymId=${gymId}&search=${encodeURIComponent(search)}&page=${page}&size=${size}`),
+  getMember:    (id: number)               => api.get(`/members/${id}`),
+  addMember:    (data: object)             => api.post('/members', data),   // data must include gymId
+  updateMember: (id: number, data: object) => api.put(`/members/${id}`, data),
+  deleteMember: (id: number)               => api.delete(`/members/${id}`),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,104 +1,168 @@
 import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { gymOwnerApi } from '../../api/axios';
+import type { Gym } from '../../types';
+import Modal from '../../components/ui/Modal';
 import { useToast } from '../../components/common/Toast';
 
-interface GymData { id: number; gymName: string; address: string; phone: string }
+const emptyForm = { gymName: '', address: '', phone: '' };
 
 export default function GymProfile() {
   const { showToast } = useToast();
-  const [gym, setGym] = useState<GymData | null>(null);
+  const [gyms, setGyms] = useState<Gym[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({ gymName: '', address: '', phone: '' });
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState<Gym | null>(null);
+  const [form, setForm] = useState({ ...emptyForm });
+  const [saving, setSaving] = useState(false);
 
-  const loadGym = () => {
-    gymOwnerApi.getMyGym()
-      .then((r) => {
-        const g = r.data.data as GymData;
-        setGym(g);
-        setForm({ gymName: g.gymName, address: g.address ?? '', phone: g.phone ?? '' });
-        setError('');
-      })
-      .catch(() => setError('Failed to load gym profile'))
+  const load = () => {
+    gymOwnerApi.getMyGyms()
+      .then((r) => { setGyms(r.data.data); setError(''); })
+      .catch(() => setError('Failed to load gyms'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadGym(); }, []);
+  useEffect(() => { load(); }, []);
 
-  const save = async () => {
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm });
+    setModal(true);
+  };
+
+  const openEdit = (gym: Gym) => {
+    setEditing(gym);
+    setForm({ gymName: gym.gymName, address: gym.address ?? '', phone: gym.phone ?? '' });
+    setModal(true);
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
     setSaving(true);
     try {
-      await gymOwnerApi.updateMyGym(form);
-      showToast('Gym profile updated', 'success');
-      setEditing(false);
-      loadGym();
-    } catch {
-      showToast('Update failed', 'error');
+      if (editing) {
+        await gymOwnerApi.updateMyGym(editing.id, form);
+        showToast('Gym updated', 'success');
+      } else {
+        await gymOwnerApi.createGym(form);
+        showToast('New gym branch created!', 'success');
+      }
+      setModal(false);
+      load();
+    } catch (err: unknown) {
+      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const f = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const f = (k: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((p) => ({ ...p, [k]: e.target.value }));
 
-  if (loading) return (
-    <div className="max-w-xl">
-      <div className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse space-y-4">
-        {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-8 bg-gray-100 rounded" />)}
-      </div>
-    </div>
-  );
-
-  if (error) return <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-700 text-sm">{error}</div>;
-  if (!gym) return null;
-
   return (
-    <div className="max-w-xl">
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">Gym Profile</h3>
-          {!editing && (
-            <button onClick={() => setEditing(true)}
-              className="text-sm border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50">
-              Edit
-            </button>
-          )}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">My Gym Branches</h3>
+          <p className="text-sm text-gray-500 mt-0.5">Manage all your gym locations from here</p>
         </div>
-
-        {editing ? (
-          <div className="space-y-4">
-            {(['gymName', 'address', 'phone'] as const).map((k) => (
-              <div key={k}>
-                <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
-                  {k === 'gymName' ? 'Gym Name' : k}
-                </label>
-                <input value={form[k]} onChange={f(k)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
-              </div>
-            ))}
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setEditing(false)}
-                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-              <button onClick={save} disabled={saving}
-                className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
-                {saving ? 'Saving…' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <dl className="space-y-4">
-            {[['Gym Name', gym.gymName], ['Address', gym.address ?? '—'], ['Phone', gym.phone ?? '—']].map(([l, v]) => (
-              <div key={l} className="flex border-b border-gray-100 pb-3">
-                <dt className="w-32 text-sm text-gray-500">{l}</dt>
-                <dd className="text-sm font-medium text-gray-900">{v}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        <button onClick={openCreate}
+          className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors">
+          + Add Branch
+        </button>
       </div>
+
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-red-700 text-sm">{error}</div>}
+
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+              <div className="h-5 bg-gray-200 rounded w-1/3 mb-3" />
+              <div className="h-4 bg-gray-100 rounded w-1/2" />
+            </div>
+          ))}
+        </div>
+      ) : gyms.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <div className="text-5xl mb-4">🏢</div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No gyms yet</h3>
+          <p className="text-gray-500 text-sm mb-6">Create your first gym branch to start managing members.</p>
+          <button onClick={openCreate}
+            className="bg-gray-900 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors">
+            Create First Gym
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {gyms.map((gym) => (
+            <div key={gym.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-start justify-between mb-4">
+                <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
+                  🏋️
+                </div>
+                <button onClick={() => openEdit(gym)}
+                  className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-600 font-medium">
+                  Edit
+                </button>
+              </div>
+              <h4 className="font-bold text-gray-900 text-lg mb-1">{gym.gymName}</h4>
+              {gym.address && (
+                <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  </svg>
+                  {gym.address}
+                </div>
+              )}
+              {gym.phone && (
+                <div className="flex items-center gap-1.5 text-gray-500 text-sm">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  {gym.phone}
+                </div>
+              )}
+              <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400">
+                ID #{gym.id}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Modal open={modal} title={editing ? 'Edit Gym Branch' : 'Add New Gym Branch'} onClose={() => setModal(false)}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Gym Name *</label>
+            <input value={form.gymName} onChange={f('gymName')} required
+              placeholder="e.g. FitZone Downtown"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Address / City</label>
+            <input value={form.address} onChange={f('address')}
+              placeholder="e.g. 123 Main St, New York"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+            <input value={form.phone} onChange={f('phone')}
+              placeholder="+1 234 567 8900"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-gray-900 focus:ring-1 focus:ring-gray-900" />
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button type="button" onClick={() => setModal(false)}
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" disabled={saving}
+              className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
+              {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Gym'}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

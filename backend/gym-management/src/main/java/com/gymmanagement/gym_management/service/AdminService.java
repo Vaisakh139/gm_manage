@@ -10,6 +10,7 @@ import com.gymmanagement.gym_management.repository.GymRepository;
 import com.gymmanagement.gym_management.repository.MemberRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +20,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdminService {
 
     private final GymRepository gymRepository;
@@ -26,8 +28,6 @@ public class AdminService {
     private final MemberRepository memberRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
-
-    // ── Injected MapStruct mappers ────────────────────────────
     private final GymMapper gymMapper;
     private final UserMapper userMapper;
 
@@ -35,16 +35,18 @@ public class AdminService {
 
     @Transactional(readOnly = true)
     public List<GymResponse> getAllGyms() {
-        return gymRepository.findAll()
+        List<GymResponse> gyms = gymRepository.findAll()
                 .stream()
                 .map(gymMapper::toGymResponse)
                 .toList();
+        log.debug("[ADMIN] Fetched all gyms | count={}", gyms.size());
+        return gyms;
     }
 
-    /** Create gym + GYM_OWNER account with a temporary password, then send a welcome email */
     @Transactional
     public GymResponse createGym(GymRequest request) {
         if (userRepository.existsByEmail(request.getOwnerEmail())) {
+            log.warn("[ADMIN] Create gym failed — email already in use: {}", request.getOwnerEmail());
             throw new BusinessException("Email already in use: " + request.getOwnerEmail());
         }
 
@@ -71,32 +73,45 @@ public class AdminService {
 
         emailService.sendWelcomeEmail(owner.getEmail(), owner.getName(), tempPassword);
 
+        log.info("[ADMIN] Gym created | gymName='{}' ownerEmail={} gymId={}",
+                gym.getGymName(), owner.getEmail(), gym.getId());
+
         return gymMapper.toGymResponse(gym);
     }
 
     @Transactional
     public GymResponse updateGym(Long gymId, GymRequest request) {
         Gym gym = findGym(gymId);
+        String oldName = gym.getGymName();
         gym.setGymName(request.getGymName());
         gym.setAddress(request.getAddress());
         gym.setPhone(request.getPhone());
-        return gymMapper.toGymResponse(gymRepository.save(gym));
+        GymResponse response = gymMapper.toGymResponse(gymRepository.save(gym));
+
+        log.info("[ADMIN] Gym updated | gymId={} oldName='{}' newName='{}'",
+                gymId, oldName, request.getGymName());
+
+        return response;
     }
 
     @Transactional
     public void deleteGym(Long gymId) {
-        gymRepository.delete(findGym(gymId));
+        Gym gym = findGym(gymId);
+        log.info("[ADMIN] Gym deleted | gymId={} gymName='{}'", gymId, gym.getGymName());
+        gymRepository.delete(gym);
     }
 
     // ── Users ─────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
-        return userRepository.findAll()
+        List<UserResponse> users = userRepository.findAll()
                 .stream()
                 .filter(u -> u.getRole() != Role.ADMIN)
                 .map(userMapper::toUserResponse)
                 .toList();
+        log.debug("[ADMIN] Fetched all users | count={}", users.size());
+        return users;
     }
 
     @Transactional
@@ -104,20 +119,30 @@ public class AdminService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         user.setActive(active);
-        return userMapper.toUserResponse(userRepository.save(user));
+        UserResponse response = userMapper.toUserResponse(userRepository.save(user));
+
+        log.info("[ADMIN] User status changed | userId={} email={} active={}",
+                userId, user.getEmail(), active);
+
+        return response;
     }
 
     // ── Dashboard ─────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public DashboardStatsResponse getDashboardStats() {
-        return DashboardStatsResponse.builder()
+        DashboardStatsResponse stats = DashboardStatsResponse.builder()
                 .totalGyms(gymRepository.count())
                 .totalGymOwners(userRepository.countByRole(Role.GYM_OWNER))
                 .activeGymOwners(userRepository.countByRoleAndActiveTrue(Role.GYM_OWNER))
                 .totalMembers(memberRepository.count())
                 .activeMembers(memberRepository.countByStatus(MemberStatus.ACTIVE))
                 .build();
+
+        log.debug("[ADMIN] Dashboard stats | gyms={} owners={} members={}",
+                stats.getTotalGyms(), stats.getTotalGymOwners(), stats.getTotalMembers());
+
+        return stats;
     }
 
     // ── Helpers ───────────────────────────────────────────────

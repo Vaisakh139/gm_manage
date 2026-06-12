@@ -7,12 +7,22 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface GymRepository extends JpaRepository<Gym, Long> {
 
-    Optional<Gym> findByOwnerId(Long ownerId);
+    /** All gyms owned by a given user (multiple branches allowed) */
+    List<Gym> findByOwnerIdOrderByCreatedAtAsc(Long ownerId);
+
+    /** Quick existence check — used before creating a new owner user */
     boolean existsByOwnerId(Long ownerId);
+
+    /** Count gyms owned by a user */
+    long countByOwnerId(Long ownerId);
+
+    /** Resolve a gym by id and verify ownership in one query */
+    Optional<Gym> findByIdAndOwnerId(Long id, Long ownerId);
 
     /**
      * Public full-text search across gym name and address/city.

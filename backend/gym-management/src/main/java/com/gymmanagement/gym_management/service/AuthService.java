@@ -9,6 +9,7 @@ import com.gymmanagement.gym_management.repository.PasswordResetTokenRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
 import com.gymmanagement.gym_management.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,6 +21,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private final AuthenticationManager authManager;
@@ -32,13 +34,15 @@ public class AuthService {
 
     // ── Login ────────────────────────────────────────────────
 
-    /** Authenticate and return a signed JWT with user details */
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
         var auth = authManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
         User user = (User) auth.getPrincipal();
         String token = jwtUtil.generateToken(user);
+
+        log.info("[AUTH] Login successful | email={} role={}", user.getEmail(), user.getRole());
+
         return AuthResponse.builder()
                 .token(token)
                 .userId(user.getId())
@@ -51,30 +55,24 @@ public class AuthService {
 
     // ── Self-Registration (Gym Owner) ────────────────────────
 
-    /**
-     * Public gym owner self-registration.
-     * Creates a GYM_OWNER user + their Gym in one transaction,
-     * then immediately returns a valid JWT so the user lands on their dashboard.
-     */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
+            log.warn("[AUTH] Registration failed — email already in use: {}", request.getEmail());
             throw new BusinessException("An account with this email already exists");
         }
 
-        // Create the owner's user account
         User owner = User.builder()
                 .name(request.getOwnerName())
                 .email(request.getEmail())
                 .phone(request.getPhone())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.GYM_OWNER)
-                .passwordChanged(true)   // they chose their own password
+                .passwordChanged(true)
                 .active(true)
                 .build();
         userRepository.save(owner);
 
-        // Create the gym linked to the owner
         Gym gym = Gym.builder()
                 .gymName(request.getGymName())
                 .address(request.getAddress())
@@ -83,7 +81,8 @@ public class AuthService {
                 .build();
         gymRepository.save(gym);
 
-        // Issue a JWT so the frontend can immediately navigate to the dashboard
+        log.info("[AUTH] Gym owner registered | gymName='{}' email={}", request.getGymName(), request.getEmail());
+
         String token = jwtUtil.generateToken(owner);
         return AuthResponse.builder()
                 .token(token)
@@ -97,21 +96,22 @@ public class AuthService {
 
     // ── Change Password ──────────────────────────────────────
 
-    /** Works for both first-login forced change and voluntary change */
     @Transactional
     public void changePassword(Long userId, ChangePasswordRequest request) {
         User user = findUser(userId);
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            log.warn("[AUTH] Password change failed — wrong current password | userId={}", userId);
             throw new BusinessException("Current password is incorrect");
         }
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         user.setPasswordChanged(true);
         userRepository.save(user);
+
+        log.info("[AUTH] Password changed | email={}", user.getEmail());
     }
 
-    // ── Forgot / Reset Password ──────────────────────────────
+    // ── Forgot Password ──────────────────────────────────────
 
-    /** Generate a time-limited reset token and email it to the user */
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
@@ -127,9 +127,12 @@ public class AuthService {
                 .build());
 
         emailService.sendPasswordResetEmail(user.getEmail(), user.getName(), token);
+
+        log.info("[AUTH] Password reset email sent | email={}", user.getEmail());
     }
 
-    /** Validate the reset token and apply the new password */
+    // ── Reset Password ───────────────────────────────────────
+
     @Transactional
     public void resetPassword(ResetPasswordRequest request) {
         PasswordResetToken resetToken = tokenRepository.findByToken(request.getToken())
@@ -137,6 +140,7 @@ public class AuthService {
 
         if (resetToken.isExpired()) {
             tokenRepository.delete(resetToken);
+            log.warn("[AUTH] Password reset failed — token expired | userId={}", resetToken.getUser().getId());
             throw new BusinessException("Reset token has expired. Please request a new one.");
         }
 
@@ -145,6 +149,8 @@ public class AuthService {
         user.setPasswordChanged(true);
         userRepository.save(user);
         tokenRepository.delete(resetToken);
+
+        log.info("[AUTH] Password reset successful | email={}", user.getEmail());
     }
 
     // ── Helpers ──────────────────────────────────────────────
