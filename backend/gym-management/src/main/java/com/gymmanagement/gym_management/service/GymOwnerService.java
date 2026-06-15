@@ -8,6 +8,8 @@ import com.gymmanagement.gym_management.exception.BusinessException;
 import com.gymmanagement.gym_management.exception.ResourceNotFoundException;
 import com.gymmanagement.gym_management.mapper.GymMapper;
 import com.gymmanagement.gym_management.mapper.MemberMapper;
+import com.gymmanagement.gym_management.entity.EquipmentStatus;
+import com.gymmanagement.gym_management.repository.EquipmentRepository;
 import com.gymmanagement.gym_management.repository.GymRepository;
 import com.gymmanagement.gym_management.repository.MemberRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
@@ -31,6 +33,7 @@ public class GymOwnerService {
 
     private final GymRepository gymRepository;
     private final MemberRepository memberRepository;
+    private final EquipmentRepository equipmentRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
@@ -106,6 +109,7 @@ public class GymOwnerService {
         List<Gym> gyms = gymRepository.findByOwnerIdOrderByCreatedAtAsc(ownerId);
 
         long totalMembers = 0, active = 0, inactive = 0, expired = 0;
+        long totalEquip = 0, availEquip = 0, outOfServiceEquip = 0;
         List<GymOwnerDashboardResponse.GymStat> gymStats = new ArrayList<>();
 
         for (Gym gym : gyms) {
@@ -113,11 +117,17 @@ public class GymOwnerService {
             long act      = memberRepository.countByGymIdAndStatus(gym.getId(), MemberStatus.ACTIVE);
             long inact    = memberRepository.countByGymIdAndStatus(gym.getId(), MemberStatus.INACTIVE);
             long exp      = memberRepository.countByGymIdAndStatus(gym.getId(), MemberStatus.EXPIRED);
+            long eTotal   = equipmentRepository.countByGymId(gym.getId());
+            long eAvail   = equipmentRepository.countByGymIdAndStatus(gym.getId(), EquipmentStatus.AVAILABLE);
+            long eOut     = equipmentRepository.countByGymIdAndStatus(gym.getId(), EquipmentStatus.OUT_OF_SERVICE);
 
             totalMembers += total;
             active       += act;
             inactive     += inact;
             expired      += exp;
+            totalEquip   += eTotal;
+            availEquip   += eAvail;
+            outOfServiceEquip += eOut;
 
             gymStats.add(GymOwnerDashboardResponse.GymStat.builder()
                     .gymId(gym.getId())
@@ -125,6 +135,8 @@ public class GymOwnerService {
                     .address(gym.getAddress())
                     .totalMembers(total)
                     .activeMembers(act)
+                    .totalEquipments(eTotal)
+                    .availableEquipments(eAvail)
                     .build());
         }
 
@@ -134,6 +146,9 @@ public class GymOwnerService {
                 .activeMembers(active)
                 .inactiveMembers(inactive)
                 .expiredMembers(expired)
+                .totalEquipments(totalEquip)
+                .availableEquipments(availEquip)
+                .outOfServiceEquipments(outOfServiceEquip)
                 .gymStats(gymStats)
                 .build();
 

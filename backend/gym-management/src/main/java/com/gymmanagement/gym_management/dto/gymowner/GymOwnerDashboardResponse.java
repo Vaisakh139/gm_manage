@@ -12,11 +12,17 @@ import java.util.List;
 @Data @Builder
 public class GymOwnerDashboardResponse {
 
+    // Members
     private long totalGyms;
     private long totalMembers;
     private long activeMembers;
     private long inactiveMembers;
     private long expiredMembers;
+
+    // Equipment (aggregated across all owned gyms)
+    private long totalEquipments;
+    private long availableEquipments;
+    private long outOfServiceEquipments;
 
     /** Per-gym breakdown — one entry per gym branch */
     private List<GymStat> gymStats;
@@ -28,5 +34,7 @@ public class GymOwnerDashboardResponse {
         private String address;
         private long totalMembers;
         private long activeMembers;
+        private long totalEquipments;
+        private long availableEquipments;
     }
 }

@@ -78,6 +78,29 @@ export interface MemberProfile {
   memberStatus: MemberStatus;
 }
 
+export type EquipmentStatus = 'AVAILABLE' | 'UNDER_MAINTENANCE' | 'OUT_OF_SERVICE';
+
+export interface Equipment {
+  id: number;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  quantity: number;
+  status: EquipmentStatus;
+  gymId: number;
+  gymName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EquipmentFormData {
+  name: string;
+  description: string;
+  quantity: number;
+  status: EquipmentStatus;
+  imageUrl: string;
+}
+
 export interface GymPublicResult {
   id: number;
   gymName: string;
@@ -93,6 +116,9 @@ export interface DashboardStats {
   activeGymOwners: number;
   totalMembers: number;
   activeMembers: number;
+  totalEquipments: number;
+  availableEquipments: number;
+  equipmentsUnderMaintenance: number;
 }
 
 export interface GymOwnerDashboard {
@@ -101,6 +127,9 @@ export interface GymOwnerDashboard {
   activeMembers: number;
   inactiveMembers: number;
   expiredMembers: number;
+  totalEquipments: number;
+  availableEquipments: number;
+  outOfServiceEquipments: number;
   gymStats: GymStat[];
 }
 
@@ -110,4 +139,6 @@ export interface GymStat {
   address: string | null;
   totalMembers: number;
   activeMembers: number;
+  totalEquipments: number;
+  availableEquipments: number;
 }

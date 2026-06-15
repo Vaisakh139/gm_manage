@@ -17,17 +17,20 @@ import ChangePassword from './pages/auth/ChangePassword';
 import AdminDashboard from './pages/admin/Dashboard';
 import GymManagement from './pages/admin/GymManagement';
 import UserManagement from './pages/admin/UserManagement';
+import AdminEquipment from './pages/equipment/AdminEquipment';
 
 // Gym Owner
 import GymOwnerDashboard from './pages/gymowner/Dashboard';
 import GymProfile from './pages/gymowner/GymProfile';
 import MembersList from './pages/gymowner/MembersList';
 import AddEditMember from './pages/gymowner/AddEditMember';
+import OwnerEquipment from './pages/equipment/OwnerEquipment';
 
 // Member
 import MemberDashboard from './pages/member/Dashboard';
 import MemberProfile from './pages/member/Profile';
 import MemberChangePassword from './pages/member/MemberChangePassword';
+import MemberEquipment from './pages/equipment/MemberEquipment';
 
 export default function App() {
   return (
@@ -50,9 +53,10 @@ export default function App() {
                 <Layout title="Admin Panel" />
               </ProtectedRoute>
             }>
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="gyms" element={<GymManagement />} />
-              <Route path="users" element={<UserManagement />} />
+              <Route path="dashboard"  element={<AdminDashboard />} />
+              <Route path="gyms"       element={<GymManagement />} />
+              <Route path="users"      element={<UserManagement />} />
+              <Route path="equipment"  element={<AdminEquipment />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
 
@@ -62,11 +66,12 @@ export default function App() {
                 <Layout title="Gym Owner Panel" />
               </ProtectedRoute>
             }>
-              <Route path="dashboard" element={<GymOwnerDashboard />} />
-              <Route path="profile" element={<GymProfile />} />
-              <Route path="members" element={<MembersList />} />
-              <Route path="members/add" element={<AddEditMember />} />
+              <Route path="dashboard"        element={<GymOwnerDashboard />} />
+              <Route path="profile"          element={<GymProfile />} />
+              <Route path="members"          element={<MembersList />} />
+              <Route path="members/add"      element={<AddEditMember />} />
               <Route path="members/:id/edit" element={<AddEditMember />} />
+              <Route path="equipment"        element={<OwnerEquipment />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
 
@@ -76,8 +81,9 @@ export default function App() {
                 <Layout title="Member Portal" />
               </ProtectedRoute>
             }>
-              <Route path="dashboard" element={<MemberDashboard />} />
-              <Route path="profile" element={<MemberProfile />} />
+              <Route path="dashboard"       element={<MemberDashboard />} />
+              <Route path="profile"         element={<MemberProfile />} />
+              <Route path="equipment"       element={<MemberEquipment />} />
               <Route path="change-password" element={<MemberChangePassword />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>

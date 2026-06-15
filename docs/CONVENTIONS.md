@@ -1,149 +1,293 @@
 # Conventions
 
-## General
-
-- All code is written in English — variable names, comments, commit messages, and documentation.
-- No commented-out code is committed. Use version control history instead.
-- Every file must have a single clear responsibility.
-
----
-
 ## Backend (Java / Spring Boot)
 
-### Naming
+### Imports
+- Always use `jakarta.*` — **never** `javax.*` (Spring Boot 4 uses Jakarta EE 11)
+- Group imports: Java stdlib, then Spring, then third-party, then project classes
 
-| Construct         | Convention          | Example                         |
-|-------------------|---------------------|---------------------------------|
-| Classes           | PascalCase          | `MemberService`, `PaymentController` |
-| Methods           | camelCase           | `findMemberById`, `recordPayment` |
-| Variables         | camelCase           | `memberList`, `planId`          |
-| Constants         | UPPER_SNAKE_CASE    | `MAX_TOKEN_EXPIRY`              |
-| Packages          | lowercase           | `com.gym.management.member`     |
-| Database entities | PascalCase          | `Member`, `WorkoutPlan`         |
-| REST endpoints    | kebab-case (plural) | `/api/v1/membership-plans`      |
+### Lombok
+Use these annotations consistently:
+
+| Annotation | Where |
+|---|---|
+| `@Data` | DTOs and entities (generates getters, setters, equals, hashCode, toString) |
+| `@Builder` | DTOs and entities (fluent construction) |
+| `@Builder.Default` | Fields with non-zero/non-null defaults in `@Builder` classes |
+| `@NoArgsConstructor` + `@AllArgsConstructor` | Entities (required by JPA + MapStruct) |
+| `@RequiredArgsConstructor` | Services, controllers (constructor injection) |
+| `@Slf4j` | Services, filters (provides `log` field) |
+
+```java
+// Entity — correct defaults
+@Builder.Default
+@Column(nullable = false)
+private boolean active = true;   // without @Builder.Default, builder sets to false
+
+// Entity — wrong (will warn and use Java default in builder)
+private boolean active = true;   // @Builder ignores initializer
+```
 
 ### Package Structure
 
+Active packages (do not add new code to any other package):
+
 ```
-com.gym.management
-├── auth/           # JWT filters, security config, auth controller
-├── member/         # Member entity, repo, service, controller, DTOs
-├── trainer/        # Trainer entity, repo, service, controller, DTOs
-├── plan/           # MembershipPlan entity, repo, service, controller, DTOs
-├── payment/        # Payment entity, repo, service, controller, DTOs
-├── workout/        # WorkoutPlan entity, repo, service, controller, DTOs
-├── dashboard/      # Dashboard service and controller
-├── common/         # Shared DTOs, exceptions, response wrappers, utils
-└── config/         # App config, CORS, security filter chain
+entity/         JPA entities only
+repository/     Spring Data JPA interfaces only
+service/        Business logic, @Transactional
+controller/     REST controllers, @PreAuthorize
+dto/            Request and Response classes, nested by domain
+  auth/
+  admin/
+  gymowner/
+  member/
+  pub/
+mapper/         MapStruct interfaces
+security/       JWT, filter, UserDetailsService
+config/         Spring configuration classes
+filter/         Servlet filters
+exception/      Exception classes and GlobalExceptionHandler
 ```
 
-### DTOs and Entities
+The `model/` package contains **empty legacy stubs** — never add code there.
 
-- Entities are only used inside the service and repository layers — never returned from controllers.
-- Use separate `Request` and `Response` DTOs per endpoint type.
-- Example: `CreateMemberRequest`, `MemberResponse`, `UpdateMemberRequest`.
-- Use `record` types for simple read-only DTOs where appropriate.
+### DTOs
 
-### Exception Handling
+- Separate `XxxRequest` and `XxxResponse` for every endpoint
+- Never return a JPA entity from a controller — always map to a DTO
+- Mapping **must** happen inside a `@Transactional` service method (lazy relations)
 
-- Define custom exceptions in `common/exception/` (e.g., `ResourceNotFoundException`, `DuplicateEmailException`).
-- Use a single `@RestControllerAdvice` class to handle all exceptions globally.
-- Never catch and swallow exceptions silently.
+### Services
 
-### Validation
+```java
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class GymOwnerService {
+    // Constructor injection via @RequiredArgsConstructor
+    private final GymRepository gymRepository;
 
-- Use Bean Validation (`@NotNull`, `@Email`, `@Size`, etc.) on all request DTOs.
-- Annotate controller method parameters with `@Valid` to trigger validation.
+    // Read operations
+    @Transactional(readOnly = true)
+    public GymResponse getGymById(Long gymId, Long ownerId) { ... }
 
-### Transactions
+    // Write operations
+    @Transactional
+    public GymResponse createGym(Long ownerId, GymOwnerGymRequest request) {
+        // ... business logic ...
+        log.info("[GYM-OWNER] New gym created | gymId={} gymName='{}' ownerId={}",
+                gym.getId(), gym.getGymName(), ownerId);
+        return gymMapper.toGymResponse(gym);  // map inside @Transactional
+    }
+}
+```
 
-- `@Transactional` belongs on service methods, not repository methods.
-- Keep transactions short — do not include external calls inside a transaction boundary.
+### Logging Format
+
+```java
+// Prefix: [CONTEXT] where context is AUTH, ADMIN, GYM-OWNER, MEMBER
+// Format: key=value pairs for structured log parsing
+log.info("[AUTH] Login successful | email={} role={}", email, role);
+log.warn("[AUTH] Registration failed — email in use: {}", email);
+log.info("[GYM-OWNER] Member added | gym='{}' memberEmail={} memberId={}", gymName, email, id);
+log.debug("[GYM-OWNER] Members listed | gym='{}' search='{}' page={} total={}", ...);
+```
+
+Levels: `ERROR` (system failures), `WARN` (business rule violations), `INFO` (write operations), `DEBUG` (read operations)
+
+### Controllers
+
+```java
+@RestController
+@RequestMapping("/api/admin")
+@PreAuthorize("hasAuthority('ROLE_ADMIN')")  // class level — applies to all methods
+@RequiredArgsConstructor
+public class AdminController {
+
+    @GetMapping("/gyms")
+    public ResponseEntity<ApiResponse<List<GymResponse>>> getAllGyms() {
+        return ResponseEntity.ok(ApiResponse.ok("Gyms fetched", adminService.getAllGyms()));
+    }
+}
+```
+
+- Always use `hasAuthority('ROLE_X')` not `hasRole('X')` — avoids Spring Security 7 prefix issues
+- Wrap all responses in `ApiResponse.ok(message, data)`
+- Use `@Valid` on request body parameters
+
+### MapStruct Mappers
+
+```java
+@Mapper(componentModel = "spring")
+public interface GymMapper {
+    @Mapping(source = "owner.id",    target = "ownerId")
+    @Mapping(source = "owner.name",  target = "ownerName")
+    @Mapping(source = "owner.email", target = "ownerEmail")
+    GymResponse toGymResponse(Gym gym);    // owner.* accessed here — must be within @Transactional
+}
+```
+
+- `componentModel = "spring"` → generates `@Component`, injectable via `@RequiredArgsConstructor`
+- Annotation processor order in pom.xml: **Lombok → lombok-mapstruct-binding → MapStruct**
+
+### Exceptions
+
+```java
+// Resource not found → 404
+throw new ResourceNotFoundException("Gym not found with id: " + id);
+
+// Business rule violation → 400
+throw new BusinessException("Email already in use: " + email);
+
+// Do NOT throw RuntimeException directly — always use typed exceptions
+```
 
 ---
 
-## Frontend (React / TypeScript)
+## Frontend (TypeScript / React)
 
-### Naming
+### Imports
 
-| Construct         | Convention    | Example                          |
-|-------------------|---------------|----------------------------------|
-| Components        | PascalCase    | `MemberCard`, `PaymentTable`     |
-| Hooks             | camelCase, `use` prefix | `useMemberList`, `useAuth` |
-| Files (components)| PascalCase    | `MemberCard.tsx`                 |
-| Files (utils/hooks)| camelCase   | `formatDate.ts`, `useAuth.ts`    |
-| Types/Interfaces  | PascalCase    | `Member`, `MembershipPlan`       |
-| CSS classes       | kebab-case (Tailwind utilities only) | N/A  |
-| Redux slices      | camelCase     | `memberSlice`, `authSlice`       |
-| API functions     | camelCase, verb-first | `fetchMembers`, `createPayment` |
+```typescript
+// Type-only imports REQUIRED (verbatimModuleSyntax is enabled)
+import type { Gym, Member } from '../../types';
 
-### Component Rules
+// Value imports
+import { gymOwnerApi } from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+```
 
-- Prefer functional components with hooks — no class components.
-- Each component lives in its own file.
-- Props interfaces are defined in the same file as the component, named `{ComponentName}Props`.
-- Do not put business logic inside components — extract to custom hooks.
-
-### State Management
-
-- Global auth state: Redux Toolkit slice.
-- Server state (lists, details): React Query (`useQuery`, `useMutation`).
-- Local UI state (modals, form inputs): `useState`.
-
-### API Layer
-
-- All API calls go through centralized functions in `src/api/`.
-- Axios instance in `src/api/axiosInstance.ts` handles base URL and JWT injection.
-- No `fetch` calls directly in components or hooks.
+Never use `import { SomeType }` for types — always `import type { SomeType }`.
 
 ### TypeScript
 
-- `strict` mode enabled — no `any` types without explicit justification.
-- All API response shapes are typed in `src/types/`.
-- Avoid non-null assertions (`!`) — use optional chaining and guards instead.
+- No `any` types — use `unknown` with type guards if needed
+- All API response types defined in `types/index.ts`
+- All API call functions typed with proper generics in `api/axios.ts`
+
+### API Calls
+
+All calls go through the single Axios instance in `api/axios.ts`:
+
+```typescript
+// DO NOT create new axios instances
+// DO NOT call fetch() directly
+// Always use the exported API objects:
+import { adminApi, gymOwnerApi, memberApi, authApi, publicApi } from '../../api';
+```
+
+### Error Handling
+
+Every API call **must** have a `.catch()` and an error state:
+
+```typescript
+const [error, setError] = useState('');
+const [loading, setLoading] = useState(true);
+
+useEffect(() => {
+    adminApi.getGyms()
+        .then((r) => setGyms(r.data.data))
+        .catch(() => setError('Failed to load gyms'))
+        .finally(() => setLoading(false));
+}, []);
+
+if (loading) return <SkeletonLoader />;
+if (error)   return <ErrorMessage message={error} />;
+```
+
+### Loading States
+
+Every data-fetching component must show a skeleton/placeholder while loading:
+
+```typescript
+if (loading) return (
+    <div className="space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-8 bg-gray-100 rounded animate-pulse" />
+        ))}
+    </div>
+);
+```
+
+### Component Structure
+
+```
+pages/<role>/<PageName>.tsx
+    useState for data, loading, error
+    useEffect to fetch data
+    Early returns for loading/error
+    Render JSX
+    Handlers (save, delete, etc.)
+```
+
+### Tailwind CSS
+
+Using Tailwind CSS v4 (`@import "tailwindcss"` in `index.css`).
+
+Common utility patterns:
+```
+bg-gray-900          dark backgrounds (sidebar, hero)
+bg-white             cards, modals, forms
+text-gray-900        primary text
+text-gray-500        secondary / muted text
+border-gray-200      card borders
+rounded-xl           standard card radius
+focus:ring-gray-900  focus rings on inputs
+hover:bg-gray-700    button hover
+```
+
+### Naming Conventions
+
+| Type | Convention | Example |
+|---|---|---|
+| Components | PascalCase | `GymProfile.tsx` |
+| Hooks | camelCase with `use` prefix | `useAuth` |
+| API functions | camelCase | `gymOwnerApi.getMyGyms()` |
+| Types/Interfaces | PascalCase | `GymOwnerDashboard` |
+| CSS classes | Tailwind utilities only | `className="..."` |
+
+### File Organization
+
+```
+pages/<role>/          One file per page
+components/common/     Shared layout components (Layout, Sidebar, Toast)
+components/public/     Landing page components
+components/ui/         Generic UI primitives (Modal, Badge)
+api/                   All API calls in one place
+context/               Global state (auth)
+types/                 All TypeScript types
+```
+
+### Protected Routes
+
+```typescript
+// In App.tsx — wrap with ProtectedRoute and specify allowed roles
+<Route path="/admin" element={
+    <ProtectedRoute roles={['ADMIN']}>
+        <Layout title="Admin Panel" />
+    </ProtectedRoute>
+}>
+
+// ProtectedRoute also forces /change-password if passwordChanged === false
+```
 
 ---
 
-## Database
+## Git Conventions
 
-- Table names: plural, snake_case (`membership_plans`, `workout_plans`).
-- Column names: snake_case (`user_id`, `created_at`).
-- Foreign key column name: `{referenced_table_singular}_id` (e.g., `member_id`).
-- Timestamps: always `TIMESTAMPTZ` (timezone-aware), named `created_at` and `updated_at`.
-- Soft deletes preferred over hard deletes — use `is_active` flag.
-- All schema changes through Flyway migrations only.
-
----
-
-## Git
-
-### Branch Naming
-
-```
-feature/<short-description>
-bugfix/<short-description>
-hotfix/<short-description>
-chore/<short-description>
-```
+### Branch Names
+`feature/<description>`, `fix/<description>`, `chore/<description>`
 
 ### Commit Messages
-
-Follow the Conventional Commits specification:
-
 ```
-<type>(<scope>): <short description>
-
-feat(member): add member deactivation endpoint
-fix(auth): correct token expiry calculation
-chore(deps): upgrade Spring Boot to 3.3.0
-docs(api): add payment endpoint examples
+feat: add multi-gym support for gym owners
+fix: lazy-load UserDetailsService to fix startup error
+chore: update CLAUDE.md and docs
 ```
 
-Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `style`.
-
-### Pull Requests
-
-- Every PR targets `main` and requires at least one review before merge.
-- PR title follows the same Conventional Commits format.
-- Link the relevant issue in the PR description.
-- PRs should be small and focused on a single concern.
+### What NOT to commit
+- `application.properties` with real credentials (use env vars)
+- `node_modules/`
+- `target/`
+- `.env` files

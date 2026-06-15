@@ -6,6 +6,8 @@ import com.gymmanagement.gym_management.exception.BusinessException;
 import com.gymmanagement.gym_management.exception.ResourceNotFoundException;
 import com.gymmanagement.gym_management.mapper.GymMapper;
 import com.gymmanagement.gym_management.mapper.UserMapper;
+import com.gymmanagement.gym_management.entity.EquipmentStatus;
+import com.gymmanagement.gym_management.repository.EquipmentRepository;
 import com.gymmanagement.gym_management.repository.GymRepository;
 import com.gymmanagement.gym_management.repository.MemberRepository;
 import com.gymmanagement.gym_management.repository.UserRepository;
@@ -26,6 +28,7 @@ public class AdminService {
     private final GymRepository gymRepository;
     private final UserRepository userRepository;
     private final MemberRepository memberRepository;
+    private final EquipmentRepository equipmentRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final GymMapper gymMapper;
@@ -137,6 +140,9 @@ public class AdminService {
                 .activeGymOwners(userRepository.countByRoleAndActiveTrue(Role.GYM_OWNER))
                 .totalMembers(memberRepository.count())
                 .activeMembers(memberRepository.countByStatus(MemberStatus.ACTIVE))
+                .totalEquipments(equipmentRepository.count())
+                .availableEquipments(equipmentRepository.countByStatus(EquipmentStatus.AVAILABLE))
+                .equipmentsUnderMaintenance(equipmentRepository.countByStatus(EquipmentStatus.UNDER_MAINTENANCE))
                 .build();
 
         log.debug("[ADMIN] Dashboard stats | gyms={} owners={} members={}",

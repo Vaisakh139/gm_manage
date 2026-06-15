@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { gymOwnerApi } from '../../api/axios';
 import type { Gym } from '../../types';
 import Modal from '../../components/ui/Modal';
@@ -26,11 +27,7 @@ export default function GymProfile() {
 
   useEffect(() => { load(); }, []);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ ...emptyForm });
-    setModal(true);
-  };
+  const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setModal(true); };
 
   const openEdit = (gym: Gym) => {
     setEditing(gym);
@@ -52,7 +49,10 @@ export default function GymProfile() {
       setModal(false);
       load();
     } catch (err: unknown) {
-      showToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error', 'error');
+      showToast(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Error',
+        'error'
+      );
     } finally {
       setSaving(false);
     }
@@ -63,6 +63,7 @@ export default function GymProfile() {
 
   return (
     <div className="space-y-4">
+      {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">My Gym Branches</h3>
@@ -74,8 +75,11 @@ export default function GymProfile() {
         </button>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-red-700 text-sm">{error}</div>}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-red-700 text-sm">{error}</div>
+      )}
 
+      {/* Gym cards */}
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -98,42 +102,72 @@ export default function GymProfile() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {gyms.map((gym) => (
-            <div key={gym.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
-                  🏋️
+            <div key={gym.id} className="bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow overflow-hidden">
+              {/* Card header */}
+              <div className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center text-lg flex-shrink-0">
+                    🏋️
+                  </div>
+                  <button onClick={() => openEdit(gym)}
+                    className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-600 font-medium">
+                    Edit
+                  </button>
                 </div>
-                <button onClick={() => openEdit(gym)}
-                  className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-600 font-medium">
-                  Edit
-                </button>
+
+                <h4 className="font-bold text-gray-900 text-lg mb-1">{gym.gymName}</h4>
+
+                {gym.address && (
+                  <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-1">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {gym.address}
+                  </div>
+                )}
+
+                {gym.phone && (
+                  <div className="flex items-center gap-1.5 text-gray-500 text-sm">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                    </svg>
+                    {gym.phone}
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-400 mt-3">ID #{gym.id}</p>
               </div>
-              <h4 className="font-bold text-gray-900 text-lg mb-1">{gym.gymName}</h4>
-              {gym.address && (
-                <div className="flex items-center gap-1.5 text-gray-500 text-sm mb-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  </svg>
-                  {gym.address}
-                </div>
-              )}
-              {gym.phone && (
-                <div className="flex items-center gap-1.5 text-gray-500 text-sm">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                  </svg>
-                  {gym.phone}
-                </div>
-              )}
-              <div className="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400">
-                ID #{gym.id}
+
+              {/* Action buttons for this gym */}
+              <div className="border-t border-gray-100 grid grid-cols-2 divide-x divide-gray-100">
+                <Link
+                  to={`/gym-owner/members?gymId=${gym.id}`}
+                  className="flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                >
+                  <span>👥</span> Members
+                </Link>
+                <Link
+                  to={`/gym-owner/equipment?gymId=${gym.id}`}
+                  className="flex items-center justify-center gap-2 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                >
+                  <span>🏋️</span> Equipment
+                </Link>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <Modal open={modal} title={editing ? 'Edit Gym Branch' : 'Add New Gym Branch'} onClose={() => setModal(false)}>
+      {/* Add / Edit modal */}
+      <Modal
+        open={modal}
+        title={editing ? 'Edit Gym Branch' : 'Add New Gym Branch'}
+        onClose={() => setModal(false)}
+      >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Gym Name *</label>
@@ -155,7 +189,9 @@ export default function GymProfile() {
           </div>
           <div className="flex gap-3 justify-end pt-2">
             <button type="button" onClick={() => setModal(false)}
-              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">
+              Cancel
+            </button>
             <button type="submit" disabled={saving}
               className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
               {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Gym'}

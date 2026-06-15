@@ -1,35 +1,48 @@
 # Security Guide
 
-## Overview
-
-Security is built into the system at every layer — API, service logic, database, and frontend. This document describes the security model, mechanisms in place, and rules developers must follow.
-
----
-
 ## Authentication
 
-### Mechanism
+### JWT (JSON Web Tokens)
 
-- **JWT (JSON Web Token)** issued on successful login.
-- Tokens are signed using **HMAC-SHA256** with a secret key stored in environment configuration (never in code).
-- Token expiry: **24 hours** by default (configurable via `jwt.expiration-ms`).
-- No refresh token is issued in the initial version — users must re-authenticate after expiry.
+- **Algorithm:** HMAC-SHA256 (`HS256`)
+- **Library:** JJWT 0.12.6
+- **Token lifetime:** 24 hours (`app.jwt.expiration=86400000` ms)
+- **Subject claim:** User email address
+- **Additional claims:** `role`, `name`
+- **Secret:** 64-character hex string in `application.properties` — **change before production**
 
-### Token Flow
-
+Token generation:
+```java
+Jwts.builder()
+    .subject(user.getEmail())
+    .claim("role", user.getRole().name())
+    .claim("name", user.getName())
+    .issuedAt(new Date())
+    .expiration(new Date(System.currentTimeMillis() + expiration))
+    .signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
+    .compact();
 ```
-Client → POST /api/v1/auth/login → Server validates credentials
-                                 → Server issues signed JWT
-Client → Stores token (memory or httpOnly cookie)
-Client → Sends token in Authorization: Bearer <token> header on every request
-Server → JWT filter validates signature and expiry on every protected request
+
+### Password Hashing
+
+BCrypt with Spring Security's default cost factor (10 rounds):
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();   // strength = 10 (default)
+}
 ```
 
-### Token Storage (Frontend)
+### First-Login Password Change
 
-- Prefer storing the JWT in **memory** (JavaScript variable) for the strongest XSS protection.
-- If persistence across page refreshes is required, store in an **httpOnly cookie** — never in `localStorage` or `sessionStorage`.
-- Clearing auth state on logout must also remove the stored token.
+When the system creates an account (admin creates gym owner, gym owner adds member):
+1. A random 10-character temp password is generated (`UUID.randomUUID().toString().substring(0, 10)`)
+2. BCrypt-hashed and stored
+3. Emailed to the user in plain text (one-time)
+4. `passwordChanged = false` is set on the User record
+5. The JWT response includes `"passwordChanged": false`
+6. Frontend `ProtectedRoute` detects this and redirects to `/change-password`
+7. After changing, `passwordChanged = true` is stored — redirect is removed
 
 ---
 
@@ -37,101 +50,153 @@ Server → JWT filter validates signature and expiry on every protected request
 
 ### Role-Based Access Control (RBAC)
 
-Three roles are defined: `ADMIN`, `TRAINER`, `MEMBER`.
+Three roles enforced at the controller level:
 
-- Role is stored in the JWT payload and enforced server-side on every request.
-- Frontend uses role to determine what UI to show — this is for UX only and is not a security boundary.
-- Backend enforces all access rules regardless of frontend state.
+| Role | `ROLE_` string | Access |
+|---|---|---|
+| `ADMIN` | `ROLE_ADMIN` | Full system — all gyms, all users |
+| `GYM_OWNER` | `ROLE_GYM_OWNER` | Own gym branches and their members only |
+| `MEMBER` | `ROLE_MEMBER` | Own profile only |
+| (public) | none | `/api/auth/**`, `/api/public/**` |
 
 ### Enforcement
 
-- Spring Security `SecurityFilterChain` defines method-level or URL-level access rules.
-- `@PreAuthorize` annotations on service or controller methods enforce fine-grained rules.
-- A member may only access their own data — service layer must verify `authenticatedUserId == requestedResourceOwnerId` before returning or modifying data.
+`@PreAuthorize("hasAuthority('ROLE_X')")` at **class level** in every controller:
+
+```java
+@RestController
+@PreAuthorize("hasAuthority('ROLE_GYM_OWNER')")
+public class GymOwnerController { ... }
+```
+
+`hasAuthority('ROLE_GYM_OWNER')` is used instead of `hasRole('GYM_OWNER')` to prevent Spring Security 7's role-prefix logic from mishandling underscore-named roles.
+
+### Ownership Validation
+
+Gym owner can only access **their own** gyms and members:
+
+```java
+// Gym ownership: fetch by id AND ownerId in one query
+gymRepository.findByIdAndOwnerId(gymId, ownerId)
+    .orElseThrow(() -> new ResourceNotFoundException("Gym not found or does not belong to you"));
+
+// Member ownership: check member.gym.owner.id
+if (!member.getGym().getOwner().getId().equals(ownerId)) {
+    throw new BusinessException("This member does not belong to one of your gyms");
+}
+```
 
 ---
 
-## Input Validation
+## Spring Security Configuration
 
-### Backend
+```java
+.authorizeHttpRequests(auth -> auth
+    .requestMatchers("/api/auth/**").permitAll()    // login, register, forgot/reset password
+    .requestMatchers("/api/public/**").permitAll()  // gym search (landing page)
+    .anyRequest().authenticated()
+)
+```
 
-- All incoming request bodies are validated with Bean Validation (`@Valid`, `@NotNull`, `@Email`, `@Size`, etc.).
-- Validation failures return `400 Bad Request` with a structured error response — never raw exception stack traces.
-- Never trust any value from the client as inherently safe.
+Session management: **STATELESS** — no session cookies, JWT only.
 
-### SQL Injection Prevention
+CSRF: **disabled** (stateless JWT API, no browser session).
 
-- All database queries use **JPA / JPQL parameterized queries** or **Spring Data repository methods**.
-- Raw SQL strings built with string concatenation are prohibited.
-- Native queries must use named parameters (`:paramName`), never string interpolation.
+### Exception Handling at Filter Level
 
-### Frontend
+Custom `AuthenticationEntryPoint` and `AccessDeniedHandler` return JSON instead of HTML:
 
-- Validate form inputs before submission (client-side validation for UX only).
-- Never use `dangerouslySetInnerHTML` unless the content is explicitly sanitized.
-- Any content rendered from user input or API responses must go through React's default escaping — no raw HTML injection.
+```json
+// 401 Unauthorized (no/invalid token)
+{ "success": false, "message": "Authentication required — please log in" }
 
----
+// 403 Forbidden (valid token, wrong role — URL-level)
+{ "success": false, "message": "You do not have permission to perform this action" }
+```
 
-## Password Security
-
-- Passwords are hashed using **BCrypt** before storage — plain-text passwords never touch the database.
-- `PasswordEncoder` bean is configured with a strength factor of at least 12.
-- Password reset flows (if implemented) must use time-limited, single-use tokens sent to the registered email.
-
----
-
-## CORS Configuration
-
-- CORS is configured server-side in Spring Security to allow requests only from the known frontend origin.
-- Allowed origin must be specified explicitly — `*` (wildcard) is not permitted in production.
-- Only required HTTP methods (`GET`, `POST`, `PUT`, `DELETE`) and headers (`Authorization`, `Content-Type`) are allowed.
+Method-level 403 (from `@PreAuthorize`) is caught by `GlobalExceptionHandler.handleAuthorizationDenied()`.
 
 ---
 
-## HTTPS
+## CORS
 
-- All production traffic must be served over **HTTPS**.
-- HTTP requests should be redirected to HTTPS at the reverse proxy (Nginx) level.
-- JWT tokens sent over plain HTTP are considered compromised.
+Configured in `SecurityConfig`:
 
----
+```java
+config.setAllowedOrigins(List.of("http://localhost:5173"));
+config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+config.setAllowedHeaders(List.of("*"));
+config.setAllowCredentials(true);
+```
 
-## Sensitive Data Handling
-
-- JWT secret, database credentials, and any API keys are stored in environment variables or a secrets manager — never in source code or committed property files.
-- `.env` and `application-local.properties` files must be in `.gitignore`.
-- Log statements must never include passwords, tokens, or personally identifiable information (PII).
-- Responses must never return `password_hash` or internal system fields.
+For production, update `app.cors.allowed-origins` to your actual frontend domain.
 
 ---
 
-## Error Handling and Information Leakage
+## Password Reset Flow
 
-- Production error responses return a generic message and an error code — not stack traces or internal details.
-- The global `@RestControllerAdvice` maps all exceptions to structured responses.
-- `404 Not Found` is preferred over `403 Forbidden` when hiding the existence of a resource from unauthorized users.
+```
+1. POST /api/auth/forgot-password  { "email": "user@example.com" }
+        ↓
+2. AuthService deletes any existing token for this user
+3. Generates UUID token, saves with expiryDate = now + 1 hour
+4. Sends email: "https://frontend/reset-password?token=UUID"
+5. Response always 200 (prevents email enumeration)
+
+6. User clicks link → frontend shows reset form
+
+7. POST /api/auth/reset-password  { "token": "UUID", "newPassword": "..." }
+        ↓
+8. AuthService validates token (not expired, exists in DB)
+9. Sets new BCrypt-hashed password, passwordChanged = true
+10. Deletes token from DB
+```
 
 ---
 
-## Security Checklist for Code Reviews
+## Data Exposure
 
-Before merging any PR, verify:
+### What's NOT in the API Response
 
-- [ ] No credentials, tokens, or secrets in the code or config files.
-- [ ] All new endpoints have appropriate `@PreAuthorize` or security config entries.
-- [ ] Service layer verifies ownership before returning or modifying user-scoped data.
-- [ ] No raw SQL built with string concatenation.
-- [ ] No `dangerouslySetInnerHTML` on the frontend.
-- [ ] New environment variables are documented in `SETUP.md` and never hardcoded.
-- [ ] Log messages do not contain sensitive data.
+- Password hashes — all mappers (`GymMapper`, `MemberMapper`, `UserMapper`) use DTOs that exclude the `password` field
+- Admin-only fields not exposed to members (e.g. `active`, `passwordChanged` not in `ProfileResponse`)
+
+### Entity vs DTO Rule
+
+**Never return a JPA entity directly from a controller.** Always map to a DTO inside a `@Transactional` method:
+
+```java
+// SECURE — password hash never reaches Jackson serializer
+return gymMapper.toGymResponse(gym);
+
+// INSECURE — entity.User.password would be serialized
+return ResponseEntity.ok(gym);  // Gym.owner is a User with password field
+```
 
 ---
 
-## Known Limitations (v1)
+## Sensitive Data in Logs
 
-- No rate limiting on the login endpoint — brute-force protection is not implemented in the initial version.
-- No refresh token mechanism — token expiry requires full re-authentication.
-- No audit log of admin actions.
+The `LoggingFilter` logs: HTTP method, URI, IP, response status, duration, authenticated user email.
 
-These are tracked as planned improvements for a future release.
+**It does NOT log:**
+- Request body (passwords, personal data)
+- JWT token values
+- Password hashes
+
+Service-level logs (`AuthService`, `GymOwnerService`, etc.) log emails and IDs but never passwords.
+
+---
+
+## Production Security Checklist
+
+- [ ] Change `app.jwt.secret` to a new random 256-bit (32-byte) secret
+- [ ] Set `app.cors.allowed-origins` to your exact frontend domain (no wildcards)
+- [ ] Serve backend over HTTPS (TLS 1.2+)
+- [ ] Move all secrets from `application.properties` to environment variables
+- [ ] Set `spring.jpa.show-sql=false` (already done)
+- [ ] Set `logging.level.root=WARN` (already done)
+- [ ] Consider shorter JWT expiry (e.g. 1 hour) with refresh token implementation
+- [ ] Enable PostgreSQL SSL: append `?ssl=true&sslmode=require` to JDBC URL
+- [ ] Rate-limit `/api/auth/login` and `/api/auth/forgot-password`
+- [ ] Add `Content-Security-Policy` headers (can be added in `SecurityConfig`)

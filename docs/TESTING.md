@@ -1,213 +1,287 @@
 # Testing Guide
 
-## Philosophy
+## Current Status
 
-- Tests verify behavior, not implementation details.
-- Each test should be independent and repeatable.
-- Tests are written alongside the feature, not after.
-- A failing test must be fixed before the code is merged — never skipped without a documented reason.
+The project currently has no automated tests. This document describes the recommended test strategy for each layer.
 
 ---
 
-## Backend Testing (Java / Spring Boot)
+## Manual API Testing
 
-### Test Types
+Use any HTTP client (curl, Postman, Bruno, Insomnia) against `http://localhost:8080`.
 
-| Type              | Tool                          | Location                          |
-|-------------------|-------------------------------|-----------------------------------|
-| Unit Tests        | JUnit 5 + Mockito             | `src/test/java/.../unit/`         |
-| Integration Tests | Spring Boot Test + Testcontainers | `src/test/java/.../integration/` |
-| Repository Tests  | `@DataJpaTest` + H2 or Testcontainers | `src/test/java/.../repository/` |
+### Auth Flow
 
-### Dependencies
+```bash
+# 1. Login as admin
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@gym.com","password":"admin123"}'
 
-- `spring-boot-starter-test` (includes JUnit 5, Mockito, AssertJ)
-- `testcontainers` with `postgresql` module
-- `spring-security-test` for security context in tests
+# Save the token from the response
+TOKEN="eyJhbGci..."
+
+# 2. Get dashboard stats
+curl http://localhost:8080/api/admin/stats \
+  -H "Authorization: Bearer $TOKEN"
+
+# 3. Create a gym (also creates gym owner, sends email)
+curl -X POST http://localhost:8080/api/admin/gyms \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "gymName": "Test Gym",
+    "address": "123 Test St",
+    "phone": "+1234567890",
+    "ownerName": "Test Owner",
+    "ownerEmail": "owner@test.com",
+    "ownerPhone": "+0987654321"
+  }'
+```
+
+### Gym Owner Flow
+
+```bash
+# Login as gym owner (use email from gym creation)
+curl -X POST http://localhost:8080/api/auth/login \
+  -d '{"email":"owner@test.com","password":"<temp-password-from-email>"}'
+
+OWNER_TOKEN="eyJhbGci..."
+
+# Change password (required on first login)
+curl -X POST http://localhost:8080/api/auth/change-password \
+  -H "Authorization: Bearer $OWNER_TOKEN" \
+  -d '{"currentPassword":"<temp>","newPassword":"newpass123"}'
+
+# Create another gym branch
+curl -X POST http://localhost:8080/api/gym-owner/gyms \
+  -H "Authorization: Bearer $OWNER_TOKEN" \
+  -d '{"gymName":"Second Branch","address":"456 Other St"}'
+
+# Get dashboard (shows all branches)
+curl http://localhost:8080/api/gym-owner/dashboard \
+  -H "Authorization: Bearer $OWNER_TOKEN"
+
+# Add a member to branch (gymId from dashboard response)
+curl -X POST http://localhost:8080/api/members \
+  -H "Authorization: Bearer $OWNER_TOKEN" \
+  -d '{
+    "gymId": 1,
+    "fullName": "Test Member",
+    "email": "member@test.com",
+    "membershipPlan": "Premium",
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31"
+  }'
+
+# List members of a branch
+curl "http://localhost:8080/api/members?gymId=1&search=Test" \
+  -H "Authorization: Bearer $OWNER_TOKEN"
+```
+
+### Public Endpoints (no auth)
+
+```bash
+# Search gyms by name or city
+curl "http://localhost:8080/api/public/gyms?query=Test"
+
+# Self-register as gym owner
+curl -X POST http://localhost:8080/api/auth/register \
+  -d '{
+    "gymName":"My Gym",
+    "ownerName":"New Owner",
+    "email":"newowner@test.com",
+    "phone":"+1112223333",
+    "address":"789 New St",
+    "password":"mypass123"
+  }'
+```
 
 ---
 
-### Unit Tests
+## Recommended Test Strategy
 
-Unit tests target the **service layer** in isolation. All external dependencies (repositories, other services) are mocked.
+### Backend Unit Tests
+
+Priority: **Service layer** — business logic is here.
+
+**Tools:** JUnit 5 (included via `spring-boot-starter-data-jpa-test`), Mockito
 
 ```java
 @ExtendWith(MockitoExtension.class)
-class MemberServiceTest {
+class GymOwnerServiceTest {
 
-    @Mock
-    private MemberRepository memberRepository;
+    @Mock GymRepository gymRepository;
+    @Mock MemberRepository memberRepository;
+    @Mock UserRepository userRepository;
+    @Mock EmailService emailService;
+    @Mock MemberMapper memberMapper;
+    @Mock GymMapper gymMapper;
+    @Mock PasswordEncoder passwordEncoder;
 
-    @InjectMocks
-    private MemberService memberService;
+    @InjectMocks GymOwnerService gymOwnerService;
 
     @Test
-    void findMemberById_shouldReturnMember_whenExists() {
-        // Arrange
-        Member member = new Member();
-        member.setId(1L);
-        when(memberRepository.findById(1L)).thenReturn(Optional.of(member));
+    void addMember_emailAlreadyInUse_throwsBusinessException() {
+        when(gymRepository.findByIdAndOwnerId(1L, 1L)).thenReturn(Optional.of(mockGym()));
+        when(userRepository.existsByEmail("existing@test.com")).thenReturn(true);
 
-        // Act
-        MemberResponse result = memberService.findById(1L);
+        MemberRequest request = new MemberRequest();
+        request.setEmail("existing@test.com");
+        request.setGymId(1L);
 
-        // Assert
-        assertThat(result.getId()).isEqualTo(1L);
+        assertThrows(BusinessException.class,
+            () -> gymOwnerService.addMember(1L, 1L, request));
+    }
+
+    @Test
+    void getDashboard_aggregatesAcrossAllBranches() {
+        List<Gym> gyms = List.of(mockGym(1L, "Branch A"), mockGym(2L, "Branch B"));
+        when(gymRepository.findByOwnerIdOrderByCreatedAtAsc(1L)).thenReturn(gyms);
+        when(memberRepository.countByGymId(1L)).thenReturn(10L);
+        when(memberRepository.countByGymId(2L)).thenReturn(20L);
+        // ...
+
+        GymOwnerDashboardResponse result = gymOwnerService.getDashboard(1L);
+
+        assertThat(result.getTotalMembers()).isEqualTo(30);
+        assertThat(result.getTotalGyms()).isEqualTo(2);
+        assertThat(result.getGymStats()).hasSize(2);
     }
 }
 ```
 
-**Rules:**
-- Name tests: `methodName_shouldExpectedBehavior_whenCondition`.
-- Use `assertThat` from AssertJ — not `assertEquals`.
-- Test both the happy path and error/edge cases (e.g., `ResourceNotFoundException` when not found).
+### Backend Integration Tests
 
----
+Test the full stack with a real (test) database.
 
-### Integration Tests
-
-Integration tests target the **controller layer** and use a real database via Testcontainers. They test the full request-to-response cycle.
+**Tools:** `@SpringBootTest`, Testcontainers (PostgreSQL), `@Transactional` for rollback
 
 ```java
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
-class MemberControllerIntegrationTest {
+@SpringBootTest
+@Transactional
+class GymOwnerControllerIntegrationTest {
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15");
-
-    @Autowired
-    private TestRestTemplate restTemplate;
+    @Autowired MockMvc mockMvc;
+    @Autowired UserRepository userRepository;
+    @Autowired GymRepository gymRepository;
 
     @Test
-    void getMembers_shouldReturn403_whenUnauthenticated() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/api/v1/members", String.class);
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    void createGymBranch_returnsGymResponse() throws Exception {
+        String token = loginAsGymOwner();
+
+        mockMvc.perform(post("/api/gym-owner/gyms")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"gymName":"New Branch","address":"456 St","phone":"+1234"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.gymName").value("New Branch"));
     }
 }
 ```
 
-**Rules:**
-- Every integration test that modifies data must clean up after itself (use `@Transactional` or `@Sql` reset scripts).
-- Do not mock the database in integration tests.
-- Each controller must have at least one integration test per endpoint covering auth and business rules.
+### Backend Test Coverage Targets
 
----
+| Layer | Target Coverage |
+|---|---|
+| Services (business logic) | 80% |
+| Controllers (happy path + error paths) | 70% |
+| Repositories (custom queries) | 60% |
+| Security (JWT validation) | 80% |
 
-### Running Backend Tests
+### Frontend Component Tests
 
-```bash
-cd backend
+**Tools:** Vitest + React Testing Library
 
-# All tests
-./mvnw test
+```typescript
+import { render, screen, waitFor } from '@testing-library/react';
+import { vi } from 'vitest';
+import * as api from '../../api/axios';
+import Dashboard from './Dashboard';
 
-# Specific test class
-./mvnw test -Dtest=MemberServiceTest
+vi.mock('../../api/axios');
 
-# Skip tests (build only)
-./mvnw package -DskipTests
-```
+test('shows gym stats on load', async () => {
+    vi.mocked(api.gymOwnerApi.getDashboard).mockResolvedValue({
+        data: {
+            data: {
+                totalGyms: 2,
+                totalMembers: 50,
+                activeMembers: 45,
+                inactiveMembers: 3,
+                expiredMembers: 2,
+                gymStats: []
+            }
+        }
+    } as never);
 
----
+    render(<Dashboard />);
 
-## Frontend Testing (React / TypeScript)
-
-### Test Types
-
-| Type              | Tool                   | Location              |
-|-------------------|------------------------|-----------------------|
-| Unit Tests        | Vitest + React Testing Library | `src/**/__tests__/` |
-| Component Tests   | Vitest + React Testing Library | `src/**/__tests__/` |
-| E2E Tests         | Playwright             | `e2e/`                |
-
-### Dependencies
-
-- `vitest`
-- `@testing-library/react`
-- `@testing-library/user-event`
-- `msw` (Mock Service Worker) for API mocking
-- `@playwright/test` for E2E
-
----
-
-### Unit / Component Tests
-
-Test components through user interactions, not internal state.
-
-```tsx
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import MemberCard from '../MemberCard';
-
-test('displays member name', () => {
-  render(<MemberCard name="John Doe" plan="Gold" />);
-  expect(screen.getByText('John Doe')).toBeInTheDocument();
-});
-
-test('calls onEdit when edit button is clicked', async () => {
-  const onEdit = vi.fn();
-  render(<MemberCard name="John Doe" plan="Gold" onEdit={onEdit} />);
-  await userEvent.click(screen.getByRole('button', { name: /edit/i }));
-  expect(onEdit).toHaveBeenCalledOnce();
+    await waitFor(() => {
+        expect(screen.getByText('50')).toBeInTheDocument();
+    });
 });
 ```
 
-**Rules:**
-- Query elements by role or accessible name — never by test ID unless unavoidable.
-- Mock API calls with MSW handlers, not by mocking Axios directly.
-- Do not test implementation details (internal state, private methods).
+### Frontend E2E Tests
 
----
+**Tools:** Playwright
 
-### E2E Tests (Playwright)
+```typescript
+import { test, expect } from '@playwright/test';
 
-E2E tests cover critical user flows end to end against a running local environment.
+test('gym owner can add a member', async ({ page }) => {
+    // Login
+    await page.goto('/login');
+    await page.fill('[type=email]', 'owner@test.com');
+    await page.fill('[type=password]', 'password123');
+    await page.click('[type=submit]');
 
-**Flows to cover:**
-- Admin can log in, create a member, and view them in the list.
-- Trainer can log in, create a workout plan, and assign it to a member.
-- Member can log in and view their profile, active plan, and payment history.
+    // Navigate to members
+    await page.click('text=Members');
+    await page.click('text=+ Add Member');
 
-```bash
-cd frontend
+    // Fill form
+    await page.selectOption('select[name=gymId]', '1');
+    await page.fill('[placeholder="Full Name"]', 'New Member');
+    await page.fill('[type=email]', 'newmember@test.com');
+    await page.click('text=Add Member');
 
-# Run all E2E tests
-npx playwright test
-
-# Run in headed mode (with browser UI)
-npx playwright test --headed
-
-# Run a specific test file
-npx playwright test e2e/auth.spec.ts
+    // Verify success toast
+    await expect(page.locator('text=Member added')).toBeVisible();
+});
 ```
 
 ---
 
-### Running Frontend Tests
+## Test Data Setup
 
-```bash
-cd frontend
+Use `DataInitializer` as a reference for seeding test data. For integration tests, create a separate `TestDataInitializer` that runs before each test class:
 
-# Unit and component tests
-npm run test
-
-# Watch mode
-npm run test:watch
-
-# Coverage report
-npm run test:coverage
+```java
+@Component
+@Profile("test")
+public class TestDataInitializer implements CommandLineRunner {
+    @Override
+    public void run(String... args) {
+        // Create test admin, gym owner, member, gyms
+    }
+}
 ```
 
 ---
 
-## Coverage Targets
+## Running Tests
 
-| Area              | Target     |
-|-------------------|------------|
-| Backend services  | ≥ 80%      |
-| Backend controllers | ≥ 70%    |
-| Frontend components | ≥ 70%    |
-| Critical flows (E2E) | 100% of defined flows |
+```bash
+# Backend
+./mvnw test                    # Run all tests
+./mvnw test -pl backend        # Run backend tests only
+./mvnw test -Dtest=GymOwnerServiceTest  # Run specific test class
 
-Coverage is measured but not gated on every commit. Coverage drops on core modules (service, controller) must be reviewed in PR.
+# Frontend
+npm test                       # Run all component tests (after installing vitest)
+npx playwright test            # Run E2E tests (after installing playwright)
+```

@@ -28,52 +28,48 @@ export default function AdminDashboard() {
   }, []);
 
   if (loading) return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-1/2 mb-3" />
-          <div className="h-8 bg-gray-200 rounded w-1/3" />
+    <div className="space-y-6">
+      {[0, 1].map((s) => (
+        <div key={s}>
+          <div className="h-4 bg-gray-200 rounded w-32 mb-3 animate-pulse" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-3" />
+                <div className="h-8 bg-gray-200 rounded w-1/3" />
+              </div>
+            ))}
+          </div>
         </div>
       ))}
     </div>
   );
 
-  if (error) return (
-    <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-700 text-sm">{error}</div>
-  );
-
+  if (error) return <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-red-700 text-sm">{error}</div>;
   if (!stats) return null;
 
   return (
-    <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Total Gyms"       value={stats.totalGyms}     icon="🏢" />
-        <StatCard label="Total Members"    value={stats.totalMembers}  icon="👥"
-          sub={`${stats.activeMembers} active`} />
-        <StatCard label="Gym Owners"       value={stats.totalGymOwners} icon="👔"
-          sub={`${stats.activeGymOwners} active`} />
-        <StatCard label="Active Members"   value={stats.activeMembers}  icon="✅" />
+    <div className="space-y-8">
+      {/* Gyms & Members */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Gyms & Members</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <StatCard label="Total Gyms"       value={stats.totalGyms}     icon="🏢" />
+          <StatCard label="Total Members"    value={stats.totalMembers}  icon="👥" sub={`${stats.activeMembers} active`} />
+          <StatCard label="Gym Owners"       value={stats.totalGymOwners} icon="👔" sub={`${stats.activeGymOwners} active`} />
+          <StatCard label="Active Members"   value={stats.activeMembers}  icon="✅" />
+        </div>
       </div>
 
-      <div className="mt-6 bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Quick Overview</h3>
-        <table className="w-full text-sm">
-          <tbody>
-            {[
-              ['Total Gyms',         stats.totalGyms],
-              ['Total Gym Owners',   stats.totalGymOwners],
-              ['Active Gym Owners',  stats.activeGymOwners],
-              ['Total Members',      stats.totalMembers],
-              ['Active Members',     stats.activeMembers],
-            ].map(([label, val]) => (
-              <tr key={String(label)} className="border-b border-gray-100 last:border-0">
-                <td className="py-2.5 text-gray-500 w-48">{label}</td>
-                <td className="py-2.5 font-semibold text-gray-900">{String(val)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Equipment */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Equipment</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard label="Total Equipment"        value={stats.totalEquipments}            icon="🏋️" />
+          <StatCard label="Available"              value={stats.availableEquipments}         icon="✅" />
+          <StatCard label="Under Maintenance"      value={stats.equipmentsUnderMaintenance}  icon="🔧" />
+        </div>
       </div>
-    </>
+    </div>
   );
 }
