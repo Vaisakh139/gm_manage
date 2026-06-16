@@ -70,6 +70,85 @@ export const adminApi = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Trainers
+// ─────────────────────────────────────────────────────────────────────────────
+export const trainerApi = {
+  // Gym owner
+  getTrainers:       (gymId: number)                       => api.get(`/owner/trainers?gymId=${gymId}`),
+  getTrainer:        (id: number)                          => api.get(`/owner/trainers/${id}`),
+  createTrainer:     (gymId: number, data: object)         => api.post(`/owner/trainers?gymId=${gymId}`, data),
+  updateTrainer:     (id: number, data: object)            => api.put(`/owner/trainers/${id}`, data),
+  deleteTrainer:     (id: number)                          => api.delete(`/owner/trainers/${id}`),
+  toggleStatus:      (id: number, active: boolean)         => api.patch(`/owner/trainers/${id}/status`, { active }),
+  getAssignedMembers:(id: number)                          => api.get(`/owner/trainers/${id}/members`),
+  assignMember:      (trainerId: number, memberId: number) => api.post(`/owner/trainers/${trainerId}/members/${memberId}`, {}),
+  unassignMember:    (trainerId: number, memberId: number) => api.delete(`/owner/trainers/${trainerId}/members/${memberId}`),
+  uploadImage:       (file: File) => {
+    const fd = new FormData(); fd.append('file', file);
+    return api.post('/uploads/trainer-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  // Member
+  getMyTrainer:      ()                                    => api.get('/member/trainer'),
+  // Admin
+  getAllTrainers:     ()                                    => api.get('/admin/trainers'),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attendance
+// ─────────────────────────────────────────────────────────────────────────────
+export const attendanceApi = {
+  // Gym owner
+  getByDate:   (gymId: number, date?: string) =>
+    api.get(`/owner/attendance?gymId=${gymId}${date ? `&date=${date}` : ''}`),
+  getHistory:  (gymId: number, from?: string, to?: string) =>
+    api.get(`/owner/attendance/history?gymId=${gymId}${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`),
+  getDashboard: (gymId: number) => api.get(`/owner/attendance/dashboard?gymId=${gymId}`),
+  checkIn:     (gymId: number, data: object) =>
+    api.post(`/owner/attendance/check-in?gymId=${gymId}`, data),
+  checkOut:    (id: number) => api.put(`/owner/attendance/${id}/check-out`, {}),
+  deleteAtt:   (id: number) => api.delete(`/owner/attendance/${id}`),
+  // Member
+  getMyHistory:  ()           => api.get('/member/attendance'),
+  selfCheckIn:   ()           => api.post('/member/attendance/check-in', {}),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payments
+// ─────────────────────────────────────────────────────────────────────────────
+export const paymentApi = {
+  // Gym owner
+  getPayments:   (gymId: number, page = 0, size = 20) =>
+    api.get(`/owner/payments?gymId=${gymId}&page=${page}&size=${size}`),
+  getPending:    (gymId: number) => api.get(`/owner/payments/pending?gymId=${gymId}`),
+  getDashboard:  (gymId: number) => api.get(`/owner/payments/dashboard?gymId=${gymId}`),
+  getPayment:    (id: number)    => api.get(`/owner/payments/${id}`),
+  record:        (gymId: number, data: object) => api.post(`/owner/payments?gymId=${gymId}`, data),
+  update:        (id: number, data: object)    => api.put(`/owner/payments/${id}`, data),
+  remove:        (id: number)                  => api.delete(`/owner/payments/${id}`),
+  // Member
+  getMyPayments: ()              => api.get('/member/payments'),
+  // Admin
+  getAllPayments: ()              => api.get('/admin/payments'),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Membership Plans
+// ─────────────────────────────────────────────────────────────────────────────
+export const planApi = {
+  // Gym owner
+  getPlans:     (gymId: number)                       => api.get(`/owner/plans?gymId=${gymId}`),
+  getPlan:      (id: number)                          => api.get(`/owner/plans/${id}`),
+  createPlan:   (gymId: number, data: object)         => api.post(`/owner/plans?gymId=${gymId}`, data),
+  updatePlan:   (id: number, data: object)            => api.put(`/owner/plans/${id}`, data),
+  deletePlan:   (id: number)                          => api.delete(`/owner/plans/${id}`),
+  toggleStatus: (id: number, active: boolean)         => api.patch(`/owner/plans/${id}/status`, { active }),
+  // Member
+  getMemberPlans: ()                                  => api.get('/member/plans'),
+  // Admin
+  getAllPlans:   ()                                    => api.get('/admin/plans'),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Gym Owner  — requires ROLE_GYM_OWNER
 // ─────────────────────────────────────────────────────────────────────────────
 export const gymOwnerApi = {

@@ -41,6 +41,11 @@ public class Member {
     @Column(nullable = false)
     private MemberStatus status = MemberStatus.ACTIVE;
 
+    /** Optionally assigned personal trainer — nullable */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_trainer_id")
+    private Trainer assignedTrainer;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

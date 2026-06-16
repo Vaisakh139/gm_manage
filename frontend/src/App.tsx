@@ -25,12 +25,20 @@ import GymProfile from './pages/gymowner/GymProfile';
 import MembersList from './pages/gymowner/MembersList';
 import AddEditMember from './pages/gymowner/AddEditMember';
 import OwnerEquipment from './pages/equipment/OwnerEquipment';
+import MembershipPlans from './pages/gymowner/MembershipPlans';
+import Payments from './pages/gymowner/Payments';
+import AttendancePage from './pages/gymowner/Attendance';
+import Trainers from './pages/gymowner/Trainers';
 
 // Member
 import MemberDashboard from './pages/member/Dashboard';
 import MemberProfile from './pages/member/Profile';
 import MemberChangePassword from './pages/member/MemberChangePassword';
 import MemberEquipment from './pages/equipment/MemberEquipment';
+import MembershipPlansView from './pages/member/MembershipPlansView';
+import PaymentHistory from './pages/member/PaymentHistory';
+import AttendanceHistory from './pages/member/AttendanceHistory';
+import MyTrainer from './pages/member/MyTrainer';
 
 export default function App() {
   return (
@@ -71,7 +79,11 @@ export default function App() {
               <Route path="members"          element={<MembersList />} />
               <Route path="members/add"      element={<AddEditMember />} />
               <Route path="members/:id/edit" element={<AddEditMember />} />
-              <Route path="equipment"        element={<OwnerEquipment />} />
+              <Route path="equipment"  element={<OwnerEquipment />} />
+              <Route path="plans"    element={<MembershipPlans />} />
+              <Route path="payments"   element={<Payments />} />
+              <Route path="trainers"   element={<Trainers />} />
+              <Route path="attendance" element={<AttendancePage />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>
 
@@ -84,6 +96,10 @@ export default function App() {
               <Route path="dashboard"       element={<MemberDashboard />} />
               <Route path="profile"         element={<MemberProfile />} />
               <Route path="equipment"       element={<MemberEquipment />} />
+              <Route path="plans"    element={<MembershipPlansView />} />
+              <Route path="payments"   element={<PaymentHistory />} />
+              <Route path="trainer"    element={<MyTrainer />} />
+              <Route path="attendance" element={<AttendanceHistory />} />
               <Route path="change-password" element={<MemberChangePassword />} />
               <Route index element={<Navigate to="dashboard" replace />} />
             </Route>

@@ -20,4 +20,8 @@ public class MemberResponse {
     private MemberStatus status;
     private boolean active;
     private LocalDateTime createdAt;
+
+    // Assigned trainer (nullable)
+    private Long assignedTrainerId;
+    private String assignedTrainerName;
 }

@@ -28,7 +28,8 @@ public class UploadController {
 
     private static final Set<String> ALLOWED_TYPES = Set.of("image/jpeg", "image/jpg", "image/png");
     private static final long MAX_SIZE_BYTES = 5L * 1024 * 1024; // 5 MB
-    private static final String UPLOAD_SUBDIR = "uploads/equipments";
+    private static final String EQUIPMENT_SUBDIR = "uploads/equipments";
+    private static final String TRAINER_SUBDIR   = "uploads/trainers";
 
     /**
      * Upload an equipment image.
@@ -46,10 +47,22 @@ public class UploadController {
      *   stream with Files.copy(InputStream, Path) which always works with
      *   any absolute NIO Path.
      */
+    @PostMapping(value = "/trainer-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_GYM_OWNER')")
+    public ResponseEntity<ApiResponse<Map<String, String>>> uploadTrainerImage(
+            @RequestParam("file") MultipartFile file) throws IOException {
+        return doUpload(file, TRAINER_SUBDIR);
+    }
+
     @PostMapping(value = "/equipment-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_GYM_OWNER')")
     public ResponseEntity<ApiResponse<Map<String, String>>> uploadEquipmentImage(
             @RequestParam("file") MultipartFile file) throws IOException {
+        return doUpload(file, EQUIPMENT_SUBDIR);
+    }
+
+    private ResponseEntity<ApiResponse<Map<String, String>>> doUpload(
+            MultipartFile file, String subDir) throws IOException {
 
         // ── Validate content type ─────────────────────────────
         String contentType = file.getContentType();
@@ -79,7 +92,7 @@ public class UploadController {
         // ── Resolve ABSOLUTE directory and create if needed ───
         //    toAbsolutePath() anchors the path to the JVM working directory
         //    so Files.createDirectories() and Files.copy() always succeed.
-        Path uploadDir = Paths.get(UPLOAD_SUBDIR).toAbsolutePath();
+        Path uploadDir = Paths.get(subDir).toAbsolutePath();
         Files.createDirectories(uploadDir);
 
         Path targetFile = uploadDir.resolve(uniqueName);
@@ -90,7 +103,7 @@ public class UploadController {
         }
 
         // URL uses the relative /uploads/... path served by WebMvcConfig
-        String imageUrl = "/" + UPLOAD_SUBDIR + "/" + uniqueName;
+        String imageUrl = "/" + subDir + "/" + uniqueName;
 
         log.info("[UPLOAD] Image uploaded | file='{}' size={}KB path='{}'",
                 uniqueName, file.getSize() / 1024, targetFile);

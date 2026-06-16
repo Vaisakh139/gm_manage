@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface MemberRepository extends JpaRepository<Member, Long> {
@@ -26,6 +27,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     Page<Member> findByGymIdAndSearch(@Param("gymId") Long gymId,
                                        @Param("search") String search,
                                        Pageable pageable);
+
+    /** Members assigned to a specific trainer */
+    List<Member> findByAssignedTrainerId(Long trainerId);
 
     long countByGymId(Long gymId);
     long countByGymIdAndStatus(Long gymId, MemberStatus status);
